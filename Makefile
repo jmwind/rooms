@@ -59,8 +59,13 @@ release:
 	strip -S -x "$(BUNDLE)/Contents/MacOS/$(APP_NAME)"
 	@if LC_ALL=C grep -a -q -e "$$HOME" -e "/Users/" "$(BUNDLE)/Contents/MacOS/$(APP_NAME)"; then \
 		echo "error: the release binary still contains a local path"; exit 1; fi
+	# No extended attributes in the bundle or the ZIP: stored as ._ files, they end up
+	# inside the app when it's unzipped with `unzip`, breaking its signature ("damaged").
+	xattr -cr "$(BUNDLE)"
 	codesign --force --sign - "$(BUNDLE)"
-	ditto -c -k --keepParent "$(BUNDLE)" "$(RELEASE_ZIP)"
+	ditto -c -k --norsrc --noextattr --noacl --keepParent "$(BUNDLE)" "$(RELEASE_ZIP)"
+	@T=$$(mktemp -d) && unzip -q "$(RELEASE_ZIP)" -d "$$T" && codesign --verify --deep --strict "$$T/$(APP_NAME).app" \
+		&& echo "ZIP unzips to a validly signed app"; S=$$?; rm -rf "$$T"; exit $$S
 	@lipo -info "$(BUNDLE)/Contents/MacOS/$(APP_NAME)"
 	@shasum -a 256 "$(RELEASE_ZIP)"
 
