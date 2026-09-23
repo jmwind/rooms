@@ -158,8 +158,9 @@ private func noOverlapsIn(_ frames: [CGRect]) -> Bool {
     #expect(f.allSatisfy { a.insetBy(dx: -1, dy: -1).contains($0) }, "all on screen")
     #expect(noOverlapsIn(f))
     #expect(f[1].width >= 360 && f[2].width >= 606 && f[2].height >= 454 && f[3].height >= 400)
-    // The main window keeps its 60% share: the wide Chrome window takes the full-width row.
-    #expect(f[0].width >= (a.width - g) * 0.6 - 1)
+    // The main window keeps most of the width (Claude's unknown width still gets a
+    // usable 320 pt beside Teams): the wide Chrome window takes the full-width row.
+    #expect(f[0].width >= (a.width - g) * 0.55)
     #expect(f[2].width > f[1].width)
 }
 

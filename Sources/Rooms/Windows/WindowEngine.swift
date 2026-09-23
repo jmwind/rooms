@@ -485,8 +485,10 @@ final class WindowEngine {
         for _ in 0..<30 where hidden.contains(where: \.isHidden) { try? await Task.sleep(for: .milliseconds(20)) }
         if !hidden.isEmpty { try? await Task.sleep(for: .milliseconds(150)) }
         // Fullscreen windows can't be resized; leave them (and minimized ones) alone.
-        let probe = wins.filter { !$0.isMinimized && !$0.app.isHidden && !((AX.attribute($0.element, "AXFullScreen") as Bool?) ?? false) }
-        guard !probe.isEmpty else { return }
+        // Every other window is tried, even if macOS still reports its app as hidden
+        // a moment after showing it: a window that doesn't shrink is skipped below.
+        let probe = wins.filter { !$0.isMinimized && !((AX.attribute($0.element, "AXFullScreen") as Bool?) ?? false) }
+        guard !probe.isEmpty else { Log.file("Measured minimum sizes: nothing to measure"); return }
         for w in probe { move(w, to: CGRect(origin: w.frame.origin, size: CGSize(width: 1, height: 1))) }
         // Some apps animate the resize (Chrome, Teams): read until the sizes settle.
         var sizes: [CGSize?] = []

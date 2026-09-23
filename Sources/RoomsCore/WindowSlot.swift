@@ -105,13 +105,13 @@ public struct RestLedger: Codable, Sendable {
     }
 
     /// An unreadable file isn't silently dropped: it's moved aside as
-    /// resting.unreadable.json (the only record of where parked windows belong) and
-    /// Rooms starts a new one.
+    /// resting.unreadable-<time>.json (the only record of where parked windows
+    /// belong; each one kept) and Rooms starts a new one.
     public static func load(from url: URL = defaultURL) -> RestLedger {
         guard let data = try? Data(contentsOf: url) else { return RestLedger() }
         if let ledger = try? JSONDecoder().decode(RestLedger.self, from: data) { return ledger }
-        let aside = url.deletingLastPathComponent().appending(path: "resting.unreadable.json")
-        try? FileManager.default.removeItem(at: aside)
+        let stamp = Int(Date().timeIntervalSince1970)
+        let aside = url.deletingLastPathComponent().appending(path: "resting.unreadable-\(stamp).json")
         try? FileManager.default.moveItem(at: url, to: aside)
         return RestLedger()
     }

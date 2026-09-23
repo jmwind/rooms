@@ -62,13 +62,16 @@ public enum Tiler {
         // fits on screen at its minimum size. If none does, take the one that spills
         // least, then pull every window back onto the screen (overlap beats off-screen).
         let candidates = arrangements(n, kind: kind, in: a, gap: gap, mins: mins)
-        let best = candidates.first { overflow($0, in: a) < 1 }
+        let best = candidates.first { works($0, in: a) }
             ?? candidates.min { overflow($0, in: a) < overflow($1, in: a) }
             ?? []
         return best.map { clamp($0, into: a) }
     }
 
-    private static func arrangements(_ n: Int, kind: LayoutKind, in a: CGRect, gap: CGFloat, mins: [CGSize]) -> [[CGRect]] {
+    private static func arrangements(_ n: Int, kind: LayoutKind, in a: CGRect, gap: CGFloat, mins given: [CGSize]) -> [[CGRect]] {
+        // Every window gets at least `usable`, known minimum or not, so the others
+        // share what's left instead of squeezing one to nothing.
+        let mins = given.map { CGSize(width: max($0.width, usable.width), height: max($0.height, usable.height)) }
         switch kind {
         case .focus:
             guard n > 1 else { return [[a]] }
@@ -150,6 +153,15 @@ public enum Tiler {
 
     /// Below this, a tiled window stops being pleasant to work in.
     public static let comfortable = CGSize(width: 480, height: 360)
+    /// The least any window gets in a tidy layout. An app whose minimum isn't known yet
+    /// counts as 0, and without this floor a layout could "fit" by squeezing it to
+    /// nothing (a 0-wide Granola beside WhatsApp on a laptop).
+    public static let usable = CGSize(width: 320, height: 240)
+
+    /// A tidy arrangement that can be used: on screen, every window at least `usable`.
+    static func works(_ rects: [CGRect], in a: CGRect) -> Bool {
+        overflow(rects, in: a) < 1 && rects.allSatisfy { $0.width >= usable.width - 1 && $0.height >= usable.height - 1 }
+    }
     /// How much of each stacked window's title bar shows.
     public static let peek: CGFloat = 32
 
@@ -165,7 +177,10 @@ public enum Tiler {
         for kind in order {
             // Judge the arrangement before `frames` pulls spilling windows back on
             // screen, where they would overlap instead.
-            guard let fit = arrangements(n, kind: kind, in: a, gap: gap, mins: mins).first(where: { overflow($0, in: a) < 1 }) else { continue }
+            // For Auto, Columns means one row: wrapping into uneven rows is what Grid is for.
+            let options = arrangements(n, kind: kind, in: a, gap: gap, mins: mins)
+                .filter { kind != .columns || Set($0.map(\.minY)).count == 1 }
+            guard let fit = options.first(where: { works($0, in: a) }) else { continue }
             let roomy = fit.dropFirst().allSatisfy { $0.width >= comfortable.width - 1 && $0.height >= comfortable.height - 1 }
             if roomy { return kind }
         }
@@ -181,7 +196,7 @@ public enum Tiler {
         default:
             let mins = mins.count == n ? mins : Array(repeating: .zero, count: n)
             let a = area.insetBy(dx: gap, dy: gap)
-            return arrangements(n, kind: kind, in: a, gap: gap, mins: mins).contains { overflow($0, in: a) < 1 }
+            return arrangements(n, kind: kind, in: a, gap: gap, mins: mins).contains { works($0, in: a) }
         }
     }
 

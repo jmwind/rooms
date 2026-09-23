@@ -23,9 +23,7 @@ brew install --cask saragordic/tap/rooms
 
 Then open **Rooms** from your Applications folder. It lives in the menu bar.
 
-You can also grab the latest ZIP from [Releases](https://github.com/saragordic/rooms/releases), unzip it, and drag **Rooms.app** into Applications.
-
-If macOS blocks it, open **System Settings → Privacy & Security → Open Anyway** after trying to launch it. The app isn't notarized by Apple yet. [Apple's instructions](https://support.apple.com/en-us/102445) explain this step.
+You can also grab the latest ZIP from [Releases](https://github.com/saragordic/rooms/releases), unzip it, and drag **Rooms.app** into Applications. The app isn't notarized by Apple yet, so macOS blocks the first launch of the ZIP version: open **System Settings → Privacy & Security → Open Anyway** after trying to launch it. [Apple's instructions](https://support.apple.com/en-us/102445) explain this step. (The Homebrew version opens straight away.)
 
 Rooms needs **Accessibility** access to move windows. Turn it on in **System Settings → Privacy & Security → Accessibility** when it asks. After an update, macOS may ask again: remove Rooms from that list and add it back.
 
@@ -34,21 +32,22 @@ Rooms needs **Accessibility** access to move windows. Turn it on in **System Set
 1. Open the windows a project needs.
 2. Press **⌥Space**, type a name for the room, and press Enter.
 3. Click the windows that belong in it. The number on a card is its place in the layout, and 1 is the main window. Then **Create Room**.
+4. **Press Tab to change the layout.** In ⌥Space, select the room and press Tab (⇧Tab goes back): the preview shows each layout that fits your screen, and the room remembers the one you pick.
 
 The windows come to the screen you're on and lay themselves out. From then on, ⌥Space and the room's name (or ⌃⌥1–9) brings it back. **Getting Started** in the menu shows these steps again.
 
 ## Around the rooms
 
 - **Layouts.** In ⌥Space, press **Tab** to try the layouts that fit this screen: Focus (one big window beside the rest), Columns, Grid, **My Layout** (your own arrangement, snapped to a grid with even gaps), or Stack (cards with their title bars peeking out, only when nothing tidier fits). The preview glides as you go.
-- **Auto fits the screen.** It tries Focus, Columns and Grid, and stacks only when apps' minimum sizes leave no tidy option. When you save a room, Rooms measures how small each app lets its windows get, so the layout fits the first time. Your laptop and your monitor each remember their own layout, and plugging a monitor in re-lays out the room you're in.
+- **Auto fits the screen.** It tries Focus, Columns and Grid, and stacks only when apps' minimum sizes leave no tidy option. When you save a room, Rooms measures how small each app lets its windows get, so layouts fit from the start. Your laptop and your monitor each remember their own layout, and plugging a monitor in re-lays out the room you're in.
 - **Rooms learn.** Arrange the windows how you like and press **⌘S**: Rooms recognises the layout and tidies it, or keeps your arrangement exactly.
 - **Edit, rename, delete.** Right-click a room in ⌥Space (or use the menu for the room you're in) to choose its windows again and rename it. Delete a room with the ⓧ on its row, a right-click, or **⌘⌫** in ⌥Space, and **⌘Z** brings it back. Deleting a room never touches its windows.
 - **Direct keys.** ⌃⌥1–9 jump straight into a room; ⌘1–9 in ⌥Space gives the selected room its number.
-- **Window snapping** for the window you're in, with the same gaps as rooms: halves ⌃⌥←→↑↓ (press again for ⅔, then ⅓), quarters ⌃⌥UIJK, thirds ⌃⌥DFG, two-thirds ⌃⌥ET, maximize ⌃⌥↩, center ⌃⌥C, restore ⌃⌥⌫, other display ⌃⌥⌘←→.
+- **Window snapping** for the window you're in, with the same gaps as rooms: halves ⌃⌥←→↑↓ (press ← or → again for ⅔, then ⅓), quarters ⌃⌥UIJK, thirds ⌃⌥DFG, two-thirds ⌃⌥ET, maximize ⌃⌥↩, center ⌃⌥C, restore ⌃⌥⌫, other display ⌃⌥⌘←→.
 
 ## Nothing closes
 
-Windows that aren't in the room are hidden, or parked just off-screen when they belong to one of the room's apps. Before a window moves, Rooms writes down where it belongs, and only forgets once the window is back. **Show Everything** in the menu, quitting Rooms, or opening it again after a crash brings every parked window back.
+Windows that aren't in the room are hidden, or parked just off-screen when they belong to one of the room's apps. Before a window moves, Rooms writes down where it belongs, and only forgets once the window is back. **Show Everything** in the menu, quitting Rooms, or opening it again after a crash brings parked windows back; one whose app isn't responding stays recorded and comes back on the next try.
 
 ## Privacy
 

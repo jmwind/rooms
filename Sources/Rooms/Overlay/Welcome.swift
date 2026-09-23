@@ -61,12 +61,13 @@ final class Welcome: NSObject {
             step(1, "Open the windows for one project."),
             step(2, "Press \(shortcut), type a name for the room, and press Enter."),
             step(3, "Click the windows that belong in it, then Create Room."),
+            step(4, "To change the layout, press \(shortcut), select the room and press Tab."),
         ])
         steps.orientation = .vertical
         steps.alignment = .leading
         steps.spacing = 16
 
-        let after = label("From then on, \(shortcut) and the room's name brings it back. To change a room's layout, select it in \(shortcut) and press Tab. Rooms lives in the menu bar.",
+        let after = label("From then on, \(shortcut) and the room's name brings it back. Rooms lives in the menu bar.",
                           size: 14, weight: .regular, color: .secondaryLabelColor)
 
         var views: [NSView] = [title, intro, steps, after]
@@ -110,7 +111,8 @@ final class Welcome: NSObject {
         stack.widthAnchor.constraint(equalToConstant: width).isActive = true
 
         // Same surface as the palette: glass on macOS 26, a matching material before.
-        if let glass = Glass.surface(stack) {
+        // Tinted like the toast so the steps read clearly over busy windows.
+        if let glass = Glass.surface(stack, tint: NSColor.windowBackgroundColor.withAlphaComponent(0.85)) {
             panel.contentView = glass
             // Glass draws its own edge; the window's rectangular shadow would show as a
             // square border behind the rounded corners.
