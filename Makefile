@@ -54,6 +54,11 @@ release:
 	mkdir -p "$(BUNDLE)/Contents/MacOS" "$(BUNDLE)/Contents/Resources"
 	cp "$$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/$(APP_NAME)" "$(BUNDLE)/Contents/MacOS/"
 	cp Support/Info.plist "$(BUNDLE)/Contents/Info.plist"
+	# The compiler records where the source was built (for debuggers); strip that, so
+	# the download doesn't carry this Mac's folder names, and refuse to ship if any remain.
+	strip -S -x "$(BUNDLE)/Contents/MacOS/$(APP_NAME)"
+	@if LC_ALL=C grep -a -q -e "$$HOME" -e "/Users/" "$(BUNDLE)/Contents/MacOS/$(APP_NAME)"; then \
+		echo "error: the release binary still contains a local path"; exit 1; fi
 	codesign --force --sign - "$(BUNDLE)"
 	ditto -c -k --keepParent "$(BUNDLE)" "$(RELEASE_ZIP)"
 	@lipo -info "$(BUNDLE)/Contents/MacOS/$(APP_NAME)"
