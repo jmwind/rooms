@@ -1,0 +1,14 @@
+.build/
+build/
+.DS_Store
+*.log
+.env
+.env.*
+results/
+Tools/desksnap
+HANDOFF.md
+# Brand explorations stay private; only design/menu-bar-icon.svg ships.
+docs/brand/
+# Screen recordings stay local (they show real windows)
+*.mp4
+*.mov
