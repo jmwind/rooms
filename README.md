@@ -38,6 +38,7 @@ The windows come to the screen you're on and lay themselves out. From then on, �
 
 ## Around the rooms
 
+- **Previews show the windows.** The cards in ⌥Space show a picture of each window once Rooms has seen it on screen, so you can tell three browser windows apart at a glance. This needs **Screen Recording** access (System Settings → Privacy & Security → Screen & System Audio Recording; Rooms asks once, and macOS applies it on the next launch). A window's picture is taken when it's first seen and again when you open ⌥Space over it after a few minutes, so cards show windows roughly as you last left them without Rooms reading the screen all the time. **Window Previews** in the menu turns them off and deletes the pictures.
 - **Layouts.** In ⌥Space, press **Tab** to try the layouts that fit this screen: Focus (one big window beside the rest), Columns, Grid, **My Layout** (your own arrangement, snapped to a grid with even gaps), or Stack (cards with their title bars peeking out, only when nothing tidier fits). The preview glides as you go.
 - **Adjust a layout by hand.** In ⌥Space, select the room and press **⇧Tab**: the separator between two windows lights up in the preview. **← → ↑ ↓** move it, and the windows on both sides resize together (hold **⇧** to move a twelfth of the screen at a time). **Tab** lights the next separator. **⇧Tab** (or Enter) keeps the result as **My Layout** for this display; Esc leaves the layout as it was. Every window of the room needs to be open for this, and Stack can't be adjusted, since it overlaps on purpose.
 - **Windows come to visit.** When a link opens in a browser window that isn't in the room, or you ⌘Tab to a window that was parked, it comes to the middle of your screen to visit. **⌘E** keeps it in the room; switching rooms puts it back where it was.
@@ -54,7 +55,7 @@ Windows that aren't in the room are hidden, or parked just off-screen when they 
 
 ## Privacy
 
-Rooms works entirely on your Mac. It makes no network connections of any kind: no accounts, no analytics, no updates checked, nothing sent anywhere.
+Rooms works entirely on your Mac. It makes no network connections of any kind: no accounts, no analytics, no updates checked, nothing sent anywhere. Window previews are small pictures of your windows, kept in `previews` next to `rooms.json` for a week; they show what was on screen, so treat them like the log. Turn off **Window Previews** in the menu and Rooms deletes them and won't read the screen at all.
 
 Your rooms live in `~/Library/Application Support/Rooms/rooms.json`, which you can read and edit (**Edit Rooms…** in the menu). Parked windows are recorded next to it in `resting.json`, and a log of what Rooms moved stays in `~/Library/Logs/Rooms/rooms.log`. These include window titles, so please don't post them unedited in an issue.
 

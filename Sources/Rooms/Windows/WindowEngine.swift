@@ -342,6 +342,7 @@ final class WindowEngine {
         }
         await stackFrontToBack(placements)
         placedWindowIDs = Set(placements.compactMap(\.window.windowID))
+        placedWindows = placements.compactMap { p in p.window.windowID.map { ($0, p.window.bundleID) } }
         let name = NSScreen.screens.count > 1 && onLargest ? "the larger display" : "this display"
         Log.file("Re-laid out \(room.name) for \(name) (\(snap.screens.count) displays): \(placements.count) windows")
         return (placements.count, name)
@@ -408,6 +409,7 @@ final class WindowEngine {
         let screens = snap.screens, windows = snap.windows
         let chosenIDs = Set(placements.compactMap(\.window.windowID))
         placedWindowIDs = chosenIDs
+        placedWindows = placements.compactMap { p in p.window.windowID.map { ($0, p.window.bundleID) } }
         let chosenElements = placements.map(\.window.element)
         let isChosen = { (w: LiveWindow) in
             w.windowID.map(chosenIDs.contains) ?? chosenElements.contains { CFEqual($0, w.element) }
@@ -682,6 +684,7 @@ final class WindowEngine {
 
     /// The windows the last arrange placed: what's in the room on screen right now.
     private(set) var placedWindowIDs: Set<CGWindowID> = []
+    private(set) var placedWindows: [(id: CGWindowID, bundleID: String)] = []
 
     /// A parked window that came forward (a link landed in it, or its app was chosen
     /// with ⌘Tab) comes to visit the room: on the display you're on, centered, at its
