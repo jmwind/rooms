@@ -40,6 +40,7 @@ The windows come to the screen you're on and lay themselves out. From then on, �
 
 - **Layouts.** In ⌥Space, press **Tab** to try the layouts that fit this screen: Focus (one big window beside the rest), Columns, Grid, **My Layout** (your own arrangement, snapped to a grid with even gaps), or Stack (cards with their title bars peeking out, only when nothing tidier fits). The preview glides as you go.
 - **Adjust a layout by hand.** In ⌥Space, select the room and press **⇧Tab**: the separator between two windows lights up in the preview. **← → ↑ ↓** move it, and the windows on both sides resize together (hold **⇧** to move a twelfth of the screen at a time). **Tab** lights the next separator. **⇧Tab** (or Enter) keeps the result as **My Layout** for this display; Esc leaves the layout as it was. Every window of the room needs to be open for this, and Stack can't be adjusted, since it overlaps on purpose.
+- **Windows come to visit.** When a link opens in a browser window that isn't in the room, or you ⌘Tab to a window that was parked, it comes to the middle of your screen to visit. **⌘E** keeps it in the room; switching rooms puts it back where it was.
 - **Change which window goes where.** Tab picks the layout; the order decides which window takes which spot, and 1 is the big main spot. To rearrange, right-click the room in ⌥Space and choose **Edit Windows…**: click a card to take it out, click it again to put it back at the end, until the numbers are in the order you want. Or arrange the windows by hand (the ⌃⌥ snapping keys help) and press **⌘S** in ⌥Space to keep that arrangement.
 - **Auto fits the screen.** It tries Focus, Columns and Grid, and stacks only when apps' minimum sizes leave no tidy option. When you save a room, Rooms measures how small each app lets its windows get, so layouts fit from the start. Your laptop and your monitor each remember their own layout, and plugging a monitor in re-lays out the room you're in.
 - **Rooms learn.** Arrange the windows how you like and press **⌘S**: Rooms recognises the layout and tidies it, or keeps your arrangement exactly.
@@ -49,7 +50,7 @@ The windows come to the screen you're on and lay themselves out. From then on, �
 
 ## Nothing closes
 
-Windows that aren't in the room are hidden, or parked just off-screen when they belong to one of the room's apps. Before a window moves, Rooms writes down where it belongs, and only forgets once the window is back. **Show Everything** in the menu, quitting Rooms, or opening it again after a crash brings parked windows back; one whose app isn't responding stays recorded and comes back on the next try.
+Windows that aren't in the room are hidden, or parked just off-screen when they belong to one of the room's apps or to a browser (so a link you click never brings every browser window back). Before a window moves, Rooms writes down where it belongs, and only forgets once the window is back. **Show Everything** in the menu, quitting Rooms, or opening it again after a crash brings parked windows back; one whose app isn't responding stays recorded and comes back on the next try.
 
 ## Privacy
 

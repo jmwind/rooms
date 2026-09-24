@@ -38,13 +38,21 @@ final class WindowEngine {
         SlotMatcher.assign(slots: room.windows, windows: windows.map(\.info), claimed: claimedWindows(room))
     }
 
-    /// Chromium re-enables web accessibility when this is switched back on, costing
-    /// seconds on page loads; leave it off for them (Rectangle's list).
     /// Apps whose windows are parked rather than the app hidden. Finder is always
     /// running and macOS brings it back whenever another app hides or the desktop is
-    /// clicked, so hiding it never holds.
-    private let parkInstead: Set<String> = ["com.apple.finder"]
+    /// clicked, so hiding it never holds. Browsers, because a link clicked in a room
+    /// unhides the browser, and that would bring back every one of its windows; parked,
+    /// only the window the link lands in is involved.
+    private var parkInstead: Set<String> { browsers.union(["com.apple.finder"]) }
 
+    private let browsers: Set<String> = [
+        "com.google.Chrome", "com.google.Chrome.beta", "com.google.Chrome.canary", "com.microsoft.edgemac",
+        "com.brave.Browser", "company.thebrowser.Browser", "company.thebrowser.dia", "com.vivaldi.Vivaldi",
+        "com.openai.atlas", "com.apple.Safari", "org.mozilla.firefox",
+    ]
+
+    /// Chromium re-enables web accessibility when this is switched back on, costing
+    /// seconds on page loads; leave it off for them (Rectangle's list).
     private let chromium: Set<String> = [
         "com.google.Chrome", "com.google.Chrome.beta", "com.google.Chrome.canary", "com.microsoft.edgemac",
         "com.brave.Browser", "company.thebrowser.Browser", "company.thebrowser.dia", "com.vivaldi.Vivaldi",
@@ -333,6 +341,7 @@ final class WindowEngine {
             for p in placements { move(p.window, to: p.rect) }
         }
         await stackFrontToBack(placements)
+        placedWindowIDs = Set(placements.compactMap(\.window.windowID))
         let name = NSScreen.screens.count > 1 && onLargest ? "the larger display" : "this display"
         Log.file("Re-laid out \(room.name) for \(name) (\(snap.screens.count) displays): \(placements.count) windows")
         return (placements.count, name)
@@ -398,6 +407,7 @@ final class WindowEngine {
 
         let screens = snap.screens, windows = snap.windows
         let chosenIDs = Set(placements.compactMap(\.window.windowID))
+        placedWindowIDs = chosenIDs
         let chosenElements = placements.map(\.window.element)
         let isChosen = { (w: LiveWindow) in
             w.windowID.map(chosenIDs.contains) ?? chosenElements.contains { CFEqual($0, w.element) }
@@ -667,6 +677,30 @@ final class WindowEngine {
         let i = Geometry.bestScreen(for: win.frame, among: screens.map(\.frame)) ?? 0
         let others = screens.enumerated().filter { $0.offset != i }.map(\.element.frame)
         AX.setPosition(win.element, Geometry.parkingOrigin(windowSize: win.frame.size, screen: screens[i].visible, otherScreens: others))
+        return true
+    }
+
+    /// The windows the last arrange placed: what's in the room on screen right now.
+    private(set) var placedWindowIDs: Set<CGWindowID> = []
+
+    /// A parked window that came forward (a link landed in it, or its app was chosen
+    /// with ⌘Tab) comes to visit the room: on the display you're on, centered, at its
+    /// own size. It isn't part of the room; the next switch parks it again. False when
+    /// the window wasn't parked, so there's nothing to bring.
+    func bringGuest(_ win: LiveWindow) -> Bool {
+        guard let id = win.windowID, let entry = ledger.entries[id], entry.bundleID == win.bundleID else { return false }
+        let screens = ScreenInfo.all()
+        guard !screens.isEmpty else { return false }
+        let area = screens[activeScreenIndex(in: screens)].visible.insetBy(dx: Tiler.gap, dy: Tiler.gap)
+        let size = CGSize(width: min(entry.savedFrame.width, area.width), height: min(entry.savedFrame.height, area.height))
+        let target = CGRect(x: (area.midX - size.width / 2).rounded(), y: (area.midY - size.height / 2).rounded(), width: size.width, height: size.height)
+        move(win, to: target)
+        AX.raise(win.element)
+        if let now = AX.frame(win.element), abs(now.minX - target.minX) <= 16, abs(now.minY - target.minY) <= 16 {
+            ledger.entries[id] = nil
+            saveLedger()
+        }
+        Log.file("Guest: \(win.app.localizedName ?? win.bundleID) “\(win.title)” comes to visit")
         return true
     }
 
