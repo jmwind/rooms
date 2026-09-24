@@ -38,13 +38,21 @@ final class WindowEngine {
         SlotMatcher.assign(slots: room.windows, windows: windows.map(\.info), claimed: claimedWindows(room))
     }
 
-    /// Chromium re-enables web accessibility when this is switched back on, costing
-    /// seconds on page loads; leave it off for them (Rectangle's list).
     /// Apps whose windows are parked rather than the app hidden. Finder is always
     /// running and macOS brings it back whenever another app hides or the desktop is
-    /// clicked, so hiding it never holds.
-    private let parkInstead: Set<String> = ["com.apple.finder"]
+    /// clicked, so hiding it never holds. Browsers, because a link clicked in a room
+    /// unhides the browser, and that would bring back every one of its windows; parked,
+    /// only the window the link lands in is involved.
+    private var parkInstead: Set<String> { browsers.union(["com.apple.finder"]) }
 
+    private let browsers: Set<String> = [
+        "com.google.Chrome", "com.google.Chrome.beta", "com.google.Chrome.canary", "com.microsoft.edgemac",
+        "com.brave.Browser", "company.thebrowser.Browser", "company.thebrowser.dia", "com.vivaldi.Vivaldi",
+        "com.openai.atlas", "com.apple.Safari", "org.mozilla.firefox",
+    ]
+
+    /// Chromium re-enables web accessibility when this is switched back on, costing
+    /// seconds on page loads; leave it off for them (Rectangle's list).
     private let chromium: Set<String> = [
         "com.google.Chrome", "com.google.Chrome.beta", "com.google.Chrome.canary", "com.microsoft.edgemac",
         "com.brave.Browser", "company.thebrowser.Browser", "company.thebrowser.dia", "com.vivaldi.Vivaldi",

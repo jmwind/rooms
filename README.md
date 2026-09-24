@@ -49,7 +49,7 @@ The windows come to the screen you're on and lay themselves out. From then on, â
 
 ## Nothing closes
 
-Windows that aren't in the room are hidden, or parked just off-screen when they belong to one of the room's apps. Before a window moves, Rooms writes down where it belongs, and only forgets once the window is back. **Show Everything** in the menu, quitting Rooms, or opening it again after a crash brings parked windows back; one whose app isn't responding stays recorded and comes back on the next try.
+Windows that aren't in the room are hidden, or parked just off-screen when they belong to one of the room's apps or to a browser (so a link you click never brings every browser window back). Before a window moves, Rooms writes down where it belongs, and only forgets once the window is back. **Show Everything** in the menu, quitting Rooms, or opening it again after a crash brings parked windows back; one whose app isn't responding stays recorded and comes back on the next try.
 
 ## Privacy
 
