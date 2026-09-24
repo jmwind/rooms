@@ -25,6 +25,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// change and Show Everything run one at a time, in the order asked: two at once
     /// would interleave their moves, each hiding what the other just showed.
     private var windowWork: Task<Void, Never>?
+    /// How many pieces of window work are under way or queued.
+    private var working = 0
     /// Parked windows from a previous run have been looked for (needs Accessibility).
     private var recovered = false
     private var iconCache: [String: NSImage] = [:]
@@ -147,6 +149,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Plugging in (or unplugging) a monitor re-lays out the room you're in.
         NotificationCenter.default.addObserver(self, selector: #selector(screensChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
         lastScreens = NSScreen.screens.map(\.frame)
+        // A parked window that comes forward while you're in a room (a link landed in
+        // it, or you ⌘Tabbed to its app) comes to visit rather than staying off screen.
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(appActivated(_:)), name: NSWorkspace.didActivateApplicationNotification, object: nil)
         let shortcut = Shortcut.named(defaults.string(forKey: "shortcut"))
         if !HotkeyCenter.shared.register(shortcut) { warnShortcutTaken(shortcut) }
 
@@ -195,9 +200,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Runs `work` after whatever window work is already under way.
     private func inTurn(_ work: @escaping @MainActor () async -> Void) {
         let previous = windowWork
+        working += 1
         windowWork = Task { @MainActor in
             await previous?.value
             await work()
+            self.working -= 1
         }
     }
 
@@ -314,6 +321,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func screensChanged(_ note: Notification) { displaysChanged() }
+
+    @objc private func appActivated(_ note: Notification) {
+        guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication, app != .current else { return }
+        // A moment for the app to focus the window the link landed in.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.receiveGuest(from: app) }
+    }
+
+    /// The app that came forward has a parked window in focus: bring it to visit.
+    /// Not during a switch (Rooms activates apps itself then), and not for a window
+    /// that's in the room already.
+    private func receiveGuest(from app: NSRunningApplication) {
+        guard working == 0, AX.isTrusted, app == NSWorkspace.shared.frontmostApplication,
+              let room = rooms.first(where: { $0.id == currentRoomID }), !room.windows.isEmpty,
+              let win = engine.focusedWindow(), let id = win.windowID, !engine.placedWindowIDs.contains(id),
+              engine.ledger.entries[id] != nil else { return }
+        inTurn { [unowned self] in
+            guard engine.bringGuest(win) else { return }
+            let key = HotkeyCenter.shared.current?.label ?? "⌥ Space"
+            toast.show("\(win.app.localizedName ?? "A window") is visiting \(room.name)",
+                       detail: "⌘E in \(key) keeps it in the room; switching rooms puts it back")
+        }
+    }
 
     /// A display came or went. Wait until macOS settles, then lay out the room you're
     /// in for the biggest screen there is now.
