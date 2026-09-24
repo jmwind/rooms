@@ -61,7 +61,7 @@ final class Welcome: NSObject {
             step(1, "Open the windows for one project."),
             step(2, "Press \(shortcut), type a name for the room, and press Enter."),
             step(3, "Click the windows that belong in it, then Create Room."),
-            step(4, "To change the layout, press \(shortcut), select the room and press Tab."),
+            step(4, "To change the layout, press \(shortcut), select the room and press Tab. ⇧Tab adjusts it by hand."),
         ])
         steps.orientation = .vertical
         steps.alignment = .leading

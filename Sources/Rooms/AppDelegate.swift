@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let palette = PaletteController()
     private let engine = WindowEngine()
     private let preview = LayoutPreview()
+    private let adjuster = LayoutAdjuster()
     private let toast = Toast()
     private let picker = RoomPicker()
     private let welcome = Welcome()
@@ -99,6 +100,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         palette.onCancel = { [unowned self] in
             preview.hide()
             paletteSnapshot = nil
+        }
+        // ⇧Tab: adjust the layout by hand, on the preview; kept as My Layout.
+        palette.beginAdjusting = { [unowned self] room in
+            guard AX.isTrusted else { return "Allow Rooms to arrange windows first (in the menu bar menu)." }
+            let snap = paletteSnapshot ?? engine.snapshot()
+            paletteSnapshot = snap
+            return adjuster.begin(room, snapshot: snap, engine: engine)
+        }
+        palette.adjustNext = { [unowned self] in adjuster.next() }
+        palette.adjustMove = { [unowned self] dx, dy in adjuster.move(dx: dx, dy: dy) }
+        palette.adjustingHint = { [unowned self] in adjuster.hint }
+        palette.endAdjusting = { [unowned self] keep in
+            if let room = adjuster.end(keep: keep) { keepAdjusted(room) }
+            preview.highlight(nil)
         }
 
         palette.shortcutFor = { [unowned self] room in Room.withShortcuts(rooms).first { $0.value.id == room.id }?.key }
@@ -329,7 +344,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             preview.hide()
             return
         }
-        let placements = engine.plan(room, in: snap).placements
+        // While adjusting by hand, the preview follows the separators, not the room's layout.
+        let adjusted = adjuster.placements(for: room)
+        let placements = adjusted ?? engine.plan(room, in: snap).placements
         guard !placements.isEmpty else {
             preview.hide()
             return
@@ -344,6 +361,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 subtitle: p.window.title
             )
         }, avoiding: palette.frame)
+        preview.highlight(adjusted == nil ? nil : adjuster.highlight)
+    }
+
+    /// Keeps a layout adjusted by hand (⇧Tab in the palette): the room's My Layout, and
+    /// its layout on this display. Only the cells and the layout change, so a shortcut
+    /// given meanwhile stays.
+    private func keepAdjusted(_ adjusted: Room) {
+        guard let i = rooms.firstIndex(where: { $0.id == adjusted.id }), rooms[i].windows.count == adjusted.windows.count else { return }
+        var all = rooms
+        for w in adjusted.windows.indices { all[i].windows[w].cell = adjusted.windows[w].cell }
+        all[i].layoutByDisplay.merge(adjusted.layoutByDisplay) { _, new in new }
+        do {
+            try RoomStore.save(all, to: RoomStore.defaultURL)
+            rooms = all
+            Log.file("Kept \(adjusted.name) as adjusted by hand: \(adjusted.windows.count) windows")
+        } catch {
+            alert("Couldn't keep the layout", error.localizedDescription)
+        }
     }
 
     private func setLayout(_ kind: LayoutKind, for room: Room) {

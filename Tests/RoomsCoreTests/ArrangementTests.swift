@@ -52,9 +52,9 @@ private func roomByHand(_ a: CGRect) -> [CGRect] {
 @Test func twoThirdsPlusOneThirdIsNotMistakenForGrid() {
     let r = Arrangement.read(roomByHand(area), in: area)
     #expect(r.kind == .mine)
-    #expect(r.cells == [GridCell(col: 0, cols: 4, row: 0, rows: 6), GridCell(col: 4, cols: 4, row: 0, rows: 6),
-                        GridCell(col: 8, cols: 4, row: 0, rows: 6), GridCell(col: 0, cols: 8, row: 6, rows: 6),
-                        GridCell(col: 8, cols: 4, row: 6, rows: 6)])
+    #expect(r.cells == [GridCell(col: 0, cols: 40, row: 0, rows: 60), GridCell(col: 40, cols: 40, row: 0, rows: 60),
+                        GridCell(col: 80, cols: 40, row: 0, rows: 60), GridCell(col: 0, cols: 80, row: 60, rows: 60),
+                        GridCell(col: 80, cols: 40, row: 60, rows: 60)])
 }
 
 @Test func myLayoutDrawsEvenGaps() {
@@ -84,9 +84,9 @@ private func roomByHand(_ a: CGRect) -> [CGRect] {
 @Test func myLayoutMakesRoomForAppsThatWontShrink() {
     // Three windows in a 16:9 slice of a monitor, where one app won't go below 900 wide.
     let region = CGRect(x: 0, y: 0, width: 2366, height: 1331)
-    let cells = [GridCell(col: 0, cols: 4, row: 0, rows: 12),    // Paper
-                 GridCell(col: 4, cols: 4, row: 0, rows: 12),    // Figma (needs 900)
-                 GridCell(col: 8, cols: 4, row: 0, rows: 12)]    // Claude (needs 600)
+    let cells = [GridCell(col: 0, cols: 40, row: 0, rows: 120),    // Paper
+                 GridCell(col: 40, cols: 40, row: 0, rows: 120),   // Figma (needs 900)
+                 GridCell(col: 80, cols: 40, row: 0, rows: 120)]   // Claude (needs 600)
     let mins = [CGSize(width: 400, height: 300), CGSize(width: 900, height: 600), CGSize(width: 600, height: 400)]
     let f = GridLayout.frames(cells, in: region, mins: mins)
     #expect(f[1].width >= 900 && f[2].width >= 600 && f[0].width >= 400)
@@ -96,7 +96,7 @@ private func roomByHand(_ a: CGRect) -> [CGRect] {
 
 @Test func myLayoutWithoutMinimumsIsUnchanged() {
     let region = CGRect(x: 0, y: 0, width: 2366, height: 1331)
-    let cells = [GridCell(col: 0, cols: 8, row: 0, rows: 6), GridCell(col: 8, cols: 4, row: 0, rows: 6)]
+    let cells = [GridCell(col: 0, cols: 80, row: 0, rows: 60), GridCell(col: 80, cols: 40, row: 0, rows: 60)]
     #expect(GridLayout.frames(cells, in: region) == GridLayout.frames(cells, in: region, mins: [.zero, .zero]))
 }
 
@@ -104,9 +104,9 @@ private func roomByHand(_ a: CGRect) -> [CGRect] {
 
 @Test func aGapBetweenWindowsIsFilled() {
     // Two windows on the left with an empty row between them, one on the right.
-    let cells = [GridCell(col: 7, cols: 5, row: 0, rows: 12),
-                 GridCell(col: 0, cols: 7, row: 6, rows: 6),
-                 GridCell(col: 0, cols: 7, row: 0, rows: 5)]
+    let cells = [GridCell(col: 70, cols: 50, row: 0, rows: 120),
+                 GridCell(col: 0, cols: 70, row: 60, rows: 60),
+                 GridCell(col: 0, cols: 70, row: 0, rows: 50)]
     let filled = GridLayout.fillingHoles(cells)
     let covered = filled.map { $0.cols * $0.rows }.reduce(0, +)
     #expect(covered == GridLayout.units * GridLayout.units)
@@ -114,6 +114,6 @@ private func roomByHand(_ a: CGRect) -> [CGRect] {
 }
 
 @Test func windowsThatDontReachTheEdgeFillTheScreen() {
-    let filled = GridLayout.fillingHoles([GridCell(col: 1, cols: 4, row: 1, rows: 10), GridCell(col: 6, cols: 5, row: 0, rows: 11)])
-    #expect(filled.map { $0.cols * $0.rows }.reduce(0, +) == 144)
+    let filled = GridLayout.fillingHoles([GridCell(col: 10, cols: 40, row: 10, rows: 100), GridCell(col: 60, cols: 50, row: 0, rows: 110)])
+    #expect(filled.map { $0.cols * $0.rows }.reduce(0, +) == GridLayout.units * GridLayout.units)
 }

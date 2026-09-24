@@ -31,7 +31,7 @@ import Testing
 
 @Test func malformedSavedCellsFallBackToAuto() {
     let area = CGRect(x: 0, y: 0, width: 1440, height: 900)
-    for cell in [GridCell(col: -1, cols: 4, row: 0, rows: 12),
+    for cell in [GridCell(col: -1, cols: 40, row: 0, rows: 120),
                  GridCell(col: 0, cols: 0, row: 0, rows: 0),
                  GridCell(col: Int.max, cols: Int.max, row: 0, rows: 1)] {
         #expect(GridLayout.fillingHoles([cell]) == [cell])

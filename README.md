@@ -32,13 +32,14 @@ Rooms needs **Accessibility** access to move windows. Turn it on in **System Set
 1. Open the windows a project needs.
 2. Press **⌥Space**, type a name for the room, and press Enter.
 3. Click the windows that belong in it. The number on a card is its place in the layout, and 1 is the main window. Then **Create Room**.
-4. **Press Tab to change the layout.** In ⌥Space, select the room and press Tab (⇧Tab goes back): the preview shows each layout that fits your screen, and the room remembers the one you pick.
+4. **Press Tab to change the layout.** In ⌥Space, select the room and press Tab: the preview shows each layout that fits your screen, and the room remembers the one you pick. **⇧Tab adjusts it by hand**: the separator between two windows lights up, the arrow keys move it, and ⇧Tab again keeps the result.
 
 The windows come to the screen you're on and lay themselves out. From then on, ⌥Space and the room's name (or ⌃⌥1–9) brings it back. **Getting Started** in the menu shows these steps again.
 
 ## Around the rooms
 
 - **Layouts.** In ⌥Space, press **Tab** to try the layouts that fit this screen: Focus (one big window beside the rest), Columns, Grid, **My Layout** (your own arrangement, snapped to a grid with even gaps), or Stack (cards with their title bars peeking out, only when nothing tidier fits). The preview glides as you go.
+- **Adjust a layout by hand.** In ⌥Space, select the room and press **⇧Tab**: the separator between two windows lights up in the preview. **← → ↑ ↓** move it, and the windows on both sides resize together (hold **⇧** to move a twelfth of the screen at a time). **Tab** lights the next separator. **⇧Tab** (or Enter) keeps the result as **My Layout** for this display; Esc leaves the layout as it was. Every window of the room needs to be open for this, and Stack can't be adjusted, since it overlaps on purpose.
 - **Change which window goes where.** Tab picks the layout; the order decides which window takes which spot, and 1 is the big main spot. To rearrange, right-click the room in ⌥Space and choose **Edit Windows…**: click a card to take it out, click it again to put it back at the end, until the numbers are in the order you want. Or arrange the windows by hand (the ⌃⌥ snapping keys help) and press **⌘S** in ⌥Space to keep that arrangement.
 - **Auto fits the screen.** It tries Focus, Columns and Grid, and stacks only when apps' minimum sizes leave no tidy option. When you save a room, Rooms measures how small each app lets its windows get, so layouts fit from the start. Your laptop and your monitor each remember their own layout, and plugging a monitor in re-lays out the room you're in.
 - **Rooms learn.** Arrange the windows how you like and press **⌘S**: Rooms recognises the layout and tidies it, or keeps your arrangement exactly.
