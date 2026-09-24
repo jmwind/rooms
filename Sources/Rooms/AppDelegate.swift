@@ -220,6 +220,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // The windows have moved under the preview; let it fade away.
         preview.hide(animated: true, delay: 0.05)
         markCurrent(room)
+        // Now that the room is shown, check that every window really took its place.
+        await engine.settle()
     }
 
     // MARK: Snapping
@@ -444,6 +446,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             _ = await Switcher.walk(into: room, engine: engine)
             toast.show("Saved \(room.name) · \(count)",
                        detail: layoutPhrase(reading) + " · To change the layout: \(key), then Tab")
+            await engine.settle()
         } catch {
             alert("Couldn't save the room", error.localizedDescription)
         }
