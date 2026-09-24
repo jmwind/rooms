@@ -296,12 +296,18 @@ final class WindowEngine {
 
     /// Puts the room's windows in front-to-back order across apps. Raising a window only
     /// reorders it within its own app, so each app is brought forward in turn, back to
-    /// front, the way you'd click them. Matters for Stack, where windows overlap.
+    /// front, the way you'd click them. Matters for Stack, where windows overlap; in a
+    /// tidy layout only the first window needs to come forward, with no waiting.
     private func stackFrontToBack(_ placements: [Placement]) async {
-        for p in placements.reversed() {
+        let overlapping = placements.indices.contains { i in
+            placements.indices.contains { j in
+                i < j && placements[i].rect.intersection(placements[j].rect).width > 1 && placements[i].rect.intersection(placements[j].rect).height > 1
+            }
+        }
+        for p in overlapping ? Array(placements.reversed()) : Array(placements.prefix(1)) {
             AX.setBool(AX.app(p.window.app.processIdentifier), kAXFrontmostAttribute, true)
             AX.raise(p.window.element)
-            try? await Task.sleep(for: .milliseconds(40))
+            if overlapping { try? await Task.sleep(for: .milliseconds(40)) }
         }
     }
 
@@ -319,7 +325,7 @@ final class WindowEngine {
         let pick = { (s: Snapshot) in onLargest ? self.largestScreenIndex(in: s.screens) : self.activeScreenIndex(in: s.screens) }
         var placements = plan(room, in: snap, on: pick(snap)).placements
         for p in placements { move(p.window, to: p.rect) }
-        for _ in 0..<3 {
+        for _ in 0..<3 where placements.contains(where: unmeasured) {
             try? await Task.sleep(for: .milliseconds(120))
             guard await learnMinimums(from: placements) else { break }
             snap = snapshot()
@@ -339,13 +345,20 @@ final class WindowEngine {
     func arrange(_ room: Room, launched: Set<String> = []) async -> Report {
         let start = Date()
         var report = Report()
+        // Where the time goes, for the log: each phase's milliseconds.
+        var laps: [String] = [], lapStart = start
+        func lap(_ name: String) {
+            laps.append("\(name) \(Int(Date().timeIntervalSince(lapStart) * 1000))")
+            lapStart = Date()
+        }
         let roomBundles = Set(room.windows.map(\.bundleID)).union(room.apps.map(\.bundleID))
 
         // 1. Bring the room's apps forward, and wait until they really are: a hidden
         //    app ignores (or half-applies) moves sent while it is still unhiding.
         let hidden = NSWorkspace.shared.runningApplications.filter { roomBundles.contains($0.bundleIdentifier ?? "") && $0.isHidden }
         hidden.forEach(show)
-        for _ in 0..<30 where hidden.contains(where: \.isHidden) { try? await Task.sleep(for: .milliseconds(20)) }
+        // Ask each app itself: `isHidden` lags a few hundred milliseconds behind.
+        for _ in 0..<30 where hidden.contains(where: stillHidden) { try? await Task.sleep(for: .milliseconds(20)) }
 
         var snap = snapshot()
         var (placements, missing) = plan(room, in: snap)
@@ -358,6 +371,7 @@ final class WindowEngine {
         }
         Log.file("Walk into \(room.name): \(snap.windows.count) windows on the desk, \(placements.count) of \(room.windows.count) room windows found; unhid [\(hidden.compactMap(\.localizedName).joined(separator: ", "))]")
         report.missing = missing.map { $0.app ?? $0.bundleID }
+        lap("find")
 
         // 2. Place the room's windows (the room's own windows first: less flicker).
         for p in placements {
@@ -365,12 +379,14 @@ final class WindowEngine {
             move(p.window, to: p.rect)
         }
         report.placed = placements.count
+        lap("place")
 
         // 3. Check what each app actually did. Apps like Figma or Outlook refuse to go
         //    below a minimum size; learn it and lay the room out again around it.
         //    A new arrangement can reveal another minimum (a narrower slot), so repeat
-        //    until nothing new is learned. Known minimums make this a no-op next time.
-        for _ in 0..<3 {
+        //    until nothing new is learned. Apps measured when the room was saved need
+        //    no wait at all.
+        for _ in 0..<3 where placements.contains(where: unmeasured) {
             try? await Task.sleep(for: .milliseconds(120))
             guard await learnMinimums(from: placements) else { break }
             snap = snapshot()
@@ -378,6 +394,7 @@ final class WindowEngine {
             for p in placements { move(p.window, to: p.rect) }
             Log.file("  re-laid out around minimum sizes: " + placements.map { "\($0.window.app.localizedName ?? "") \(Int($0.rect.width))×\(Int($0.rect.height))" }.joined(separator: ", "))
         }
+        lap("sizes")
 
         let screens = snap.screens, windows = snap.windows
         let chosenIDs = Set(placements.compactMap(\.window.windowID))
@@ -397,9 +414,11 @@ final class WindowEngine {
                 unpark(win)
             }
         }
+        lap("rest")
         // 4. Stack the room's windows so the first one ends on top, and make its app
         //    the active one *before* hiding others (the active app can't be hidden).
         await stackFrontToBack(placements)
+        lap("front")
         if let first = placements.first {
             AX.setBool(first.window.element, kAXMainAttribute, true)
             if let url = first.window.app.bundleURL {
@@ -409,6 +428,7 @@ final class WindowEngine {
             }
             AX.setBool(AX.app(first.window.app.processIdentifier), kAXFrontmostAttribute, true)
         }
+        lap("activate")
 
         // 5. Hide the apps with nothing in the room. The standard call is sometimes
         //    refused; Accessibility's own "hidden" attribute is the reliable fallback.
@@ -425,9 +445,26 @@ final class WindowEngine {
         }
 
         saveLedger()
+        lap("hide")
 
-        // 6. Electron apps sometimes apply a frame late or snap back once: verify and
-        //    re-apply anything that isn't where it should be.
+        // 6. The room is on screen: the rest (see `settle`) can wait until it's shown.
+        unsettled = (room.name, placements)
+        report.milliseconds = Int(Date().timeIntervalSince(start) * 1000)
+        Log.file("Arranged \(room.name) (\(room.layout.rawValue)): \(report.placed) placed, \(report.parked) parked, \(report.hiddenApps) apps hidden, missing [\(report.missing.joined(separator: ", "))] in \(report.milliseconds) ms (\(laps.joined(separator: ", ")))")
+        return report
+    }
+
+    /// Windows placed by the last `arrange`, not yet checked by `settle`.
+    private var unsettled: (room: String, placements: [Placement])?
+
+    /// A moment after a switch: Electron apps sometimes apply a frame late or snap back
+    /// once, so every window is checked and put right, and a room window that was
+    /// parked is forgotten only now that it's confirmed back in the room (mostly
+    /// inside its place); otherwise its way back stays on disk. Runs after the room
+    /// is shown, so the switch itself doesn't wait for it.
+    func settle() async {
+        guard let (name, placements) = unsettled else { return }
+        unsettled = nil
         try? await Task.sleep(for: .milliseconds(250))
         var off: [String] = []
         for p in placements {
@@ -437,9 +474,6 @@ final class WindowEngine {
                 off.append(p.window.app.localizedName ?? p.window.bundleID)
             }
         }
-        // A room window that was parked before is forgotten only now that it's
-        // confirmed back in the room (mostly inside its place); otherwise its way
-        // back stays on disk.
         var cameBack = false
         for p in placements {
             guard let id = p.window.windowID, ledger.entries[id] != nil, let actual = AX.frame(p.window.element) else { continue }
@@ -450,13 +484,11 @@ final class WindowEngine {
             }
         }
         if cameBack { saveLedger() }
-        report.milliseconds = Int(Date().timeIntervalSince(start) * 1000)
-        Log.file("Arranged \(room.name) (\(room.layout.rawValue)): \(report.placed) placed, \(report.parked) parked, \(report.hiddenApps) apps hidden, re-applied [\(off.joined(separator: ", "))], missing [\(report.missing.joined(separator: ", "))] in \(report.milliseconds) ms")
+        Log.file("Settled \(name): re-applied [\(off.joined(separator: ", "))]")
         for p in placements {
             let a = AX.frame(p.window.element) ?? .zero
             Log.file("  \(p.window.app.localizedName ?? ""): wanted \(Int(p.rect.width))×\(Int(p.rect.height)) @\(Int(p.rect.minX)),\(Int(p.rect.minY))  got \(Int(a.width))×\(Int(a.height)) @\(Int(a.minX)),\(Int(a.minY))")
         }
-        return report
     }
 
     // MARK: Minimum sizes
@@ -473,6 +505,8 @@ final class WindowEngine {
     /// Apps whose minimum was measured (see `measureMinimums`). Learning by trial
     /// doesn't override those: an app still animating a resize looks like it refuses.
     private var measured = Set(UserDefaults.standard.stringArray(forKey: "measuredMinimums") ?? [])
+
+    private func unmeasured(_ p: Placement) -> Bool { !measured.contains(p.window.bundleID) }
 
     /// Finds how small each window's app lets it get: asks for a tiny window, reads
     /// back what the app allowed, and puts the window back. Run while the picker covers
@@ -675,6 +709,12 @@ final class WindowEngine {
         guard !ledger.entries.isEmpty else { return }
         unparkAll()
         Log.file("Recovered parked windows; \(ledger.entries.count) still waiting")
+    }
+
+    /// Whether an app just unhidden is still hidden, from the app's own accessibility
+    /// state, which answers as soon as it has unhidden.
+    private func stillHidden(_ app: NSRunningApplication) -> Bool {
+        (AX.attribute(AX.app(app.processIdentifier), kAXHiddenAttribute) as Bool?) ?? app.isHidden
     }
 
     /// Unhides an app, falling back to Accessibility when the standard call is refused.
