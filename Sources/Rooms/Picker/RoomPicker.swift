@@ -22,6 +22,8 @@ final class RoomPicker: NSObject, NSTextFieldDelegate {
     var onDone: (Choice) -> Void = { _ in }
     /// "Delete Room" was confirmed (edit mode only).
     var onDelete: (String) -> Void = { _ in }
+    /// Cancel or Esc: the picker closed without saving.
+    var onCancelled: () -> Void = {}
     private let deleteButton = NSButton(title: "Delete Room", target: nil, action: nil)
     private var deleteArmed = false
     private var editingName = ""
@@ -101,7 +103,7 @@ final class RoomPicker: NSObject, NSTextFieldDelegate {
     private func makePanel() -> PickerPanel {
         let panel = PickerPanel()
         panel.onSelectAll = { [weak self] in self?.selectAll() }
-        panel.onCancel = { [weak self] in if self?.saving == false { self?.hide() } }
+        panel.onCancel = { [weak self] in self?.cancel() }
         panel.autorecalculatesKeyViewLoop = false   // Tab order is set by hand (see buildCards)
 
         let blur = NSVisualEffectView()
@@ -295,7 +297,13 @@ final class RoomPicker: NSObject, NSTextFieldDelegate {
     @objc private func createClicked() { create() }
     // Once Create is pressed the save is under way (the app closes the picker when
     // it's done): Cancel, Esc and Delete no longer apply.
-    @objc private func cancelClicked() { if !saving { hide() } }
+    @objc private func cancelClicked() { cancel() }
+
+    private func cancel() {
+        guard !saving else { return }
+        hide()
+        onCancelled()
+    }
 
     /// First click arms it (red), second click deletes. Windows are never closed.
     @objc private func deleteClicked() {
@@ -347,7 +355,7 @@ final class RoomPicker: NSObject, NSTextFieldDelegate {
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         switch selector {
         case #selector(NSResponder.insertNewline(_:)): create(); return true
-        case #selector(NSResponder.cancelOperation(_:)): if !saving { hide() }; return true
+        case #selector(NSResponder.cancelOperation(_:)): cancel(); return true
         default: return false
         }
     }

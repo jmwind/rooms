@@ -25,6 +25,8 @@ final class PalettePanel: NSPanel {
     var onCommandDigit: ((Int) -> Void)?
     /// ⌘S: remember the selected room's current arrangement.
     var onCommandS: (() -> Void)?
+    /// ⌘E: choose the selected room's windows again.
+    var onCommandE: (() -> Void)?
     /// ⌘⌫: delete the selected room.
     var onCommandDelete: (() -> Void)?
     /// ⌘Z: bring back the room just deleted.
@@ -49,6 +51,10 @@ final class PalettePanel: NSPanel {
         }
         if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command, event.charactersIgnoringModifiers == "s" {
             onCommandS?()
+            return true
+        }
+        if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command, event.charactersIgnoringModifiers == "e" {
+            onCommandE?()
             return true
         }
         return super.performKeyEquivalent(with: event)
