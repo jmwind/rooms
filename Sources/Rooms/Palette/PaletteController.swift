@@ -24,6 +24,8 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     var shortcutFor: (Room) -> Int? = { _ in nil }
     var onAssignShortcut: (Room, Int) -> Void = { _, _ in }
     var onRemember: (Room) -> Void = { _ in }
+    /// ⌘↩: add the window you're in to the room, then walk in.
+    var onBringWindow: (Room) -> Void = { _ in }
     var onDelete: (Room) -> Void = { _ in }
     /// Brings back the last deleted room; false when there's nothing to undo.
     var onUndoDelete: () -> Bool = { false }
@@ -112,6 +114,11 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             guard let self, selected < items.count, case .room(let room) = items[selected], !room.windows.isEmpty else { return }
             onRemember(room)
         }
+        panel.onCommandReturn = { [weak self] in
+            guard let self, selected < items.count, case .room(let room) = items[selected] else { return }
+            hide()
+            onBringWindow(room)
+        }
         panel.onCommandDigit = { [weak self] n in
             guard let self, selected < items.count, case .room(let room) = items[selected] else { return }
             onAssignShortcut(room, n)
@@ -145,7 +152,7 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         // Footer
         footerLeft.font = .systemFont(ofSize: 12)
         footerLeft.textColor = .secondaryLabelColor
-        let hints = NSTextField(labelWithString: "↵ Go    esc Close")
+        let hints = NSTextField(labelWithString: "↵ Go    ⌘↵ Go with this window    esc Close")
         hints.font = .systemFont(ofSize: 12)
         hints.textColor = .tertiaryLabelColor
         let footer = NSStackView(views: [footerLeft, NSView(), hints])

@@ -108,6 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             palette.hide()
             rememberArrangement(of: room)
         }
+        palette.onBringWindow = { [unowned self] room in addFocusedWindow(to: room) }
 
         HotkeyCenter.shared.onPress = { [unowned self] in palette.toggle() }
         HotkeyCenter.shared.onRoomKey = { [unowned self] n in
@@ -471,6 +472,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// Adds the window you're in to a room (⌘↩ in the palette, or the menu), then walks
+    /// in so it takes its place. A room that had My Layout is laid out by Auto until
+    /// you adjust it again, since the new window has no place in it yet.
+    private func addFocusedWindow(to room: Room) {
+        guard AX.isTrusted else { askForAccessibility(reason: "to see which window you're in."); return }
+        guard let win = engine.focusedWindow() else {
+            toast.show("No window to add", detail: "Click into the window first, then try again.")
+            return
+        }
+        if let id = win.windowID, room.windows.contains(where: { $0.windowID == id }) {
+            toast.show("\(win.app.localizedName ?? "That window") is already in \(room.name)")
+            inTurn { await self.walk(into: room) }
+            return
+        }
+        var all = rooms
+        guard let i = all.firstIndex(where: { $0.id == room.id }), let slot = engine.slots(for: [win]).first else { return }
+        all[i].windows.append(slot)
+        if !all[i].apps.contains(where: { $0.bundleID == slot.bundleID }) { all[i].apps.append(AppRef(slot.bundleID, name: slot.app)) }
+        do {
+            try RoomStore.save(all, to: RoomStore.defaultURL)
+            rooms = all
+            let updated = all[i]
+            Log.file("Added \(slot.app ?? slot.bundleID) “\(slot.title)” to \(room.name)")
+            let count = updated.windows.count == 1 ? "1 window" : "\(updated.windows.count) windows"
+            let wasMine = updated.layout(on: engine.activeScreenUUID()) == .mine
+            toast.show("Added \(slot.app ?? slot.bundleID) to \(room.name) · \(count)",
+                       detail: wasMine ? "Laid out by Auto until you adjust My Layout again" : nil)
+            inTurn { await self.walk(into: updated) }
+        } catch {
+            alert("Couldn't add the window", error.localizedDescription)
+        }
+    }
+
     /// Removes a room. Its windows stay exactly where they are; Undo brings it back.
     private func deleteRoom(_ room: Room) {
         var all = rooms
@@ -578,6 +612,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if !current.windows.isEmpty {
                 menu.addItem(item("Remember “\(current.name)” Arrangement", #selector(rememberCurrent)))
             }
+            if AX.isTrusted {
+                menu.addItem(item("Add This Window to “\(current.name)”", #selector(addToCurrent)))
+            }
         }
         menu.addItem(.separator())
 
@@ -671,6 +708,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func rememberCurrent() {
         guard let current = rooms.first(where: { $0.id == currentRoomID }) else { return }
         rememberArrangement(of: current)
+    }
+
+    @objc private func addToCurrent() {
+        guard let current = rooms.first(where: { $0.id == currentRoomID }) else { return }
+        addFocusedWindow(to: current)
     }
 
     @objc private func editCurrent() {
