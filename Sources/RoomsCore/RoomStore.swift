@@ -11,7 +11,7 @@ public enum RoomStore {
 
     public static func load(from url: URL) throws -> [Room] {
         let data = try Data(contentsOf: url)
-        return try JSONDecoder().decode(RoomsFile.self, from: data).rooms
+        return try JSONDecoder().decode(RoomsFile.self, from: data).upgraded.rooms
     }
 
     public static func save(_ rooms: [Room], to url: URL) throws {

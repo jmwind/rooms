@@ -7,14 +7,15 @@ you checked the change.
 ## How it's put together
 
 - `Sources/RoomsCore` is the pure logic, with no AppKit: layouts (`Layout.swift`,
-  `GridLayout.swift`), recognising an arrangement (`Arrangement.swift`), matching
+  `GridLayout.swift`, and `Separators.swift` for adjusting one by hand), recognising
+  an arrangement (`Arrangement.swift`), matching
   saved windows to open ones (`WindowSlot.swift`), room search (`Matcher.swift`)
   and `rooms.json` (`RoomStore.swift`). Everything here should be covered by tests
   in `Tests/RoomsCoreTests`.
 - `Sources/Rooms` is the menu-bar app: `Windows/WindowEngine.swift` finds, moves,
   parks and measures windows through the Accessibility API; `Palette/`, `Picker/`
-  and `Overlay/` are the ⌥Space panel, the window picker, and the toast, preview
-  and welcome panels.
+  and `Overlay/` are the ⌥Space panel (with `LayoutAdjuster.swift`, its manual
+  resize mode), the window picker, and the toast, preview and welcome panels.
 
 ## Things to keep true
 
@@ -25,7 +26,11 @@ you checked the change.
   saving, laying out after a display change and Show Everything must not overlap.
 - **A layout never pushes windows off screen or on top of each other**, except
   Stack, which overlaps on purpose. Stored layouts are re-checked where they're
-  applied and fall back to Auto.
+  applied and fall back to Auto. Moving a separator by hand moves every window
+  that touches it, and a move that wouldn't stay tidy is refused.
+- **rooms.json stays readable by older versions where it can.** Its `version` is 2:
+  My Layout cells are on a 120-unit grid (version 1 used 12, and is scaled up on
+  load).
 - **No network access**, no analytics, nothing leaves the Mac.
 - Glass (macOS 26) is looked up at run time (`Overlay/Glass.swift`) so the app
   still builds with the macOS 15 SDK.

@@ -29,6 +29,16 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     var onUndoDelete: () -> Bool = { false }
     /// The palette closed without walking into a room.
     var onCancel: () -> Void = {}
+    /// Manual resize mode (⇧Tab): why it can't start on this room, or nil once it has.
+    var beginAdjusting: (Room) -> String? = { _ in "There's nothing to adjust." }
+    /// Lights the next separator.
+    var adjustNext: () -> Void = {}
+    /// Moves the lit separator by grid units (right/down positive); false when it can't.
+    var adjustMove: (Int, Int) -> Bool = { _, _ in false }
+    /// What the footer says while adjusting.
+    var adjustingHint: () -> String = { "" }
+    /// Leaves manual resize mode, keeping the result or not.
+    var endAdjusting: (Bool) -> Void = { _ in }
 
     private enum Item {
         case room(Room)
@@ -50,6 +60,7 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     private var rows: [ResultRow] = []
     private var items: [Item] = []
     private var selected = 0
+    private var isAdjusting = false
     private var topEdge: CGFloat = 0
     private var iconCache: [String: NSImage] = [:]
 
@@ -86,6 +97,11 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     func hide(keepPreview: Bool = false) {
         guard panel.isVisible, !isClosing else { return }
         isClosing = true
+        // Closing (Esc, clicking away) leaves an adjustment as it was; Enter and ⇧Tab keep it.
+        if isAdjusting {
+            isAdjusting = false
+            endAdjusting(false)
+        }
         panel.orderOut(nil)
         isClosing = false
         if !keepPreview { onCancel() }
@@ -105,10 +121,12 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         panel.delegate = self
         panel.onCommandDelete = { [weak self] in
             guard let self, selected < items.count, case .room(let room) = items[selected] else { return }
+            finishAdjusting(keep: true)
             delete(room)
         }
         panel.onCommandZ = { [weak self] in
             guard let self, onUndoDelete() else { return }
+            finishAdjusting(keep: true)
             update(keepSelection: selected)
         }
         panel.onCommandS = { [weak self] in
@@ -122,6 +140,7 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         }
         panel.onCommandDigit = { [weak self] n in
             guard let self, selected < items.count, case .room(let room) = items[selected] else { return }
+            finishAdjusting(keep: true)
             onAssignShortcut(room, n)
             update(keepSelection: selected)
         }
@@ -261,7 +280,11 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
 
         for (i, row) in rows.enumerated() {
             row.onHover = { [weak self] in self?.select(i) }
-            row.onClick = { [weak self] in self?.select(i); self?.choose() }
+            row.onClick = { [weak self] in
+                self?.finishAdjusting(keep: true)
+                self?.select(i)
+                self?.choose()
+            }
             list.addArrangedSubview(row)
             row.widthAnchor.constraint(equalTo: list.widthAnchor).isActive = true
         }
@@ -271,7 +294,8 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     }
 
     private func select(_ i: Int) {
-        guard i >= 0, i < items.count, i != selected || rows.first(where: \.isSelected) == nil else { return }
+        // While adjusting, the mouse passing over another row mustn't switch rooms.
+        guard !isAdjusting, i >= 0, i < items.count, i != selected || rows.first(where: \.isSelected) == nil else { return }
         selected = i
         refreshSelection()
     }
@@ -293,9 +317,9 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         for (i, row) in rows.enumerated() { row.isSelected = (i == selected && !items.isEmpty) }
         let room: Room? = if selected < items.count, case .room(let r) = items[selected] { r } else { nil }
 
-        // The footer names the layout of the selected room; Tab changes it.
+        // The footer names the layout of the selected room; Tab changes it, ⇧Tab adjusts it.
         if let room, !room.windows.isEmpty {
-            footerLeft.stringValue = "Here: \(layoutFor(room).title)    ⇥ Layout    ⌘E Windows    ⌘S Remember    ⌘1–9 Key"
+            footerLeft.stringValue = "Here: \(layoutFor(room).title)    ⇥ Layout    ⇧⇥ Adjust    ⌘E Windows    ⌘S Remember    ⌘1–9 Key"
         } else if let id = currentRoomID(), let current = rooms().first(where: { $0.id == id }) {
             footerLeft.stringValue = "In \(current.name)"
         } else {
@@ -305,10 +329,10 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         onPreview(room)
     }
 
-    /// Tab / Shift-Tab: try the next layout on the selected room, live.
-    private func cycleLayout(forward: Bool) {
+    /// Tab: try the next layout on the selected room, live.
+    private func cycleLayout() {
         guard selected < items.count, case .room(let room) = items[selected], !room.windows.isEmpty else { return }
-        guard let kind = nextLayout(room, forward) else {
+        guard let kind = nextLayout(room, true) else {
             // Say so, rather than Tab seeming to do nothing.
             footerLeft.stringValue = "Only one layout fits these windows on this screen."
             NSSound.beep()
@@ -318,7 +342,42 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         update(keepSelection: selected)
     }
 
+    // MARK: Manual resize mode
+
+    /// ⇧Tab: the layout's separators light up one at a time in the preview, the arrow
+    /// keys move the lit one, and ⇧Tab again keeps the result as My Layout.
+    private func startAdjusting() {
+        guard selected < items.count, case .room(let room) = items[selected], !room.windows.isEmpty else { return }
+        if let why = beginAdjusting(room) {
+            // Say why, rather than ⇧Tab seeming to do nothing.
+            footerLeft.stringValue = why
+            NSSound.beep()
+            return
+        }
+        isAdjusting = true
+        refreshAdjusting()
+    }
+
+    private func finishAdjusting(keep: Bool) {
+        guard isAdjusting else { return }
+        isAdjusting = false
+        endAdjusting(keep)
+        update(keepSelection: selected)
+    }
+
+    /// An arrow key: moves the lit separator (a beep when it can't go further).
+    private func nudge(_ dx: Int, _ dy: Int) {
+        if !adjustMove(dx, dy) { NSSound.beep() }
+        refreshAdjusting()
+    }
+
+    private func refreshAdjusting() {
+        footerLeft.stringValue = adjustingHint()
+        if selected < items.count, case .room(let room) = items[selected] { onPreview(room) }
+    }
+
     private func choose() {
+        finishAdjusting(keep: true)   // Enter keeps an adjustment, then walks in
         guard selected < items.count else { return }
         let item = items[selected]
         switch item {
@@ -365,19 +424,49 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     func controlTextDidChange(_ obj: Notification) {
         // Don't filter mid-composition (dead keys, input methods).
         if let editor = field.currentEditor() as? NSTextView, editor.hasMarkedText() { return }
+        // Typing moves on to another room; an adjustment made so far is kept.
+        if isAdjusting {
+            isAdjusting = false
+            endAdjusting(true)
+        }
         update()
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        let big = Separators.twelfth
         switch selector {
         case #selector(NSResponder.moveDown(_:)):
-            move(1); return true
+            if isAdjusting { nudge(0, 1) } else { move(1) }
+            return true
         case #selector(NSResponder.moveUp(_:)):
-            move(-1); return true
+            if isAdjusting { nudge(0, -1) } else { move(-1) }
+            return true
+        // Left and right move the caret unless a separator is lit.
+        case #selector(NSResponder.moveLeft(_:)):
+            guard isAdjusting else { return false }
+            nudge(-1, 0); return true
+        case #selector(NSResponder.moveRight(_:)):
+            guard isAdjusting else { return false }
+            nudge(1, 0); return true
+        // ⇧ + arrow: a twelfth of the screen at a time.
+        case #selector(NSResponder.moveLeftAndModifySelection(_:)):
+            guard isAdjusting else { return false }
+            nudge(-big, 0); return true
+        case #selector(NSResponder.moveRightAndModifySelection(_:)):
+            guard isAdjusting else { return false }
+            nudge(big, 0); return true
+        case #selector(NSResponder.moveUpAndModifySelection(_:)):
+            guard isAdjusting else { return false }
+            nudge(0, -big); return true
+        case #selector(NSResponder.moveDownAndModifySelection(_:)):
+            guard isAdjusting else { return false }
+            nudge(0, big); return true
         case #selector(NSResponder.insertTab(_:)):
-            cycleLayout(forward: true); return true
+            if isAdjusting { adjustNext(); refreshAdjusting() } else { cycleLayout() }
+            return true
         case #selector(NSResponder.insertBacktab(_:)):
-            cycleLayout(forward: false); return true
+            if isAdjusting { finishAdjusting(keep: true) } else { startAdjusting() }
+            return true
         case #selector(NSResponder.insertNewline(_:)):
             choose(); return true
         case #selector(NSResponder.cancelOperation(_:)):

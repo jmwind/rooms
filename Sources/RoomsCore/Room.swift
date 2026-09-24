@@ -96,11 +96,30 @@ public struct AppRef: Codable, Hashable, Sendable {
 
 /// The on-disk format of rooms.json.
 public struct RoomsFile: Codable, Sendable {
+    /// 1: My Layout on a 12-column grid. 2: on `GridLayout.units` columns.
+    public static let currentVersion = 2
+
     public var version: Int
     public var rooms: [Room]
 
-    public init(version: Int = 1, rooms: [Room]) {
+    public init(version: Int = currentVersion, rooms: [Room]) {
         self.version = version
         self.rooms = rooms
+    }
+
+    /// The file as the current version reads it: cells from a version 1 file are
+    /// brought up to the finer grid, so the layout draws exactly as before.
+    public var upgraded: RoomsFile {
+        guard version < 2 else { return self }
+        var file = self
+        for r in file.rooms.indices {
+            for w in file.rooms[r].windows.indices {
+                if let cell = file.rooms[r].windows[w].cell {
+                    file.rooms[r].windows[w].cell = GridLayout.scaled(cell, from: 12)
+                }
+            }
+        }
+        file.version = Self.currentVersion
+        return file
     }
 }

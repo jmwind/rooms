@@ -241,7 +241,9 @@ public enum Tiler {
     /// Splits `total` (minus gaps) by `weights`, but never below `mins`. Anything
     /// taken by a minimum comes out of the flexible items. If even the minimums
     /// don't fit, they are kept and the row overflows (apps won't shrink further).
-    public static func distribute(_ total: CGFloat, gap: CGFloat, mins: [CGFloat], weights: [CGFloat]) -> [CGFloat] {
+    /// `rounded`: whole points per piece (windows); off for the many narrow columns
+    /// of the grid, whose edges are rounded instead.
+    public static func distribute(_ total: CGFloat, gap: CGFloat, mins: [CGFloat], weights: [CGFloat], rounded: Bool = true) -> [CGFloat] {
         let n = mins.count
         guard n > 0 else { return [] }
         let available = total - gap * CGFloat(n - 1)
@@ -262,6 +264,7 @@ public enum Tiler {
             }
             if !changed { break }
         }
+        guard rounded else { return sizes }
         // Round so the pieces still add up to the space (rounding each on its own can
         // make a row a point or two too wide, and the last window then overlaps).
         var rounded = sizes.map { $0.rounded(.down) }
