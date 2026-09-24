@@ -1,8 +1,9 @@
 import AppKit
 
 /// "Which windows belong in this room?" Every open window appears as a card, the way
-/// Mission Control shows them. Click to add; the number on a card is its place in the
-/// room, and 1 is the main window. Name the room, press Enter.
+/// Mission Control shows them. Click to add (or Tab to a card and press Space); the
+/// number on a card is its place in the room, and 1 is the main window. Name the
+/// room, press Enter.
 @MainActor
 final class RoomPicker: NSObject, NSTextFieldDelegate {
     struct Choice {
@@ -48,6 +49,7 @@ final class RoomPicker: NSObject, NSTextFieldDelegate {
     private let createButton = NSButton(title: "Create Room", target: nil, action: nil)
     private let grid = FlippedView()
     private let scroll = NSScrollView()
+    private var columns = 1
     private var icons: [String: NSImage] = [:]
 
     /// `preselected`: indices into `windows`, in room order.
@@ -100,6 +102,7 @@ final class RoomPicker: NSObject, NSTextFieldDelegate {
         let panel = PickerPanel()
         panel.onSelectAll = { [weak self] in self?.selectAll() }
         panel.onCancel = { [weak self] in if self?.saving == false { self?.hide() } }
+        panel.autorecalculatesKeyViewLoop = false   // Tab order is set by hand (see buildCards)
 
         let blur = NSVisualEffectView()
         blur.material = .fullScreenUI
@@ -185,7 +188,7 @@ final class RoomPicker: NSObject, NSTextFieldDelegate {
         }
         header.translatesAutoresizingMaskIntoConstraints = false
 
-        let hint = NSTextField(labelWithString: "Click the windows that belong in this room. 1 is the main window.   ⌘A Select all   ↵ Create   esc Cancel")
+        let hint = NSTextField(labelWithString: "Click the windows that belong in this room, or Tab to one and press Space. 1 is the main window.   ⌘A Select all   ↵ Create   esc Cancel")
         hint.font = .systemFont(ofSize: 12)
         hint.textColor = NSColor.white.withAlphaComponent(0.85)
         hint.translatesAutoresizingMaskIntoConstraints = false
@@ -226,16 +229,34 @@ final class RoomPicker: NSObject, NSTextFieldDelegate {
                 note: win.app.isHidden ? "Hidden" : (win.isMinimized ? "Minimized" : nil)
             )
             card.onClick = { [weak self] in self?.toggle(i) }
+            card.onCreate = { [weak self] in self?.create() }
+            card.onMove = { [weak self] dx, dy in self?.moveFocus(from: i, dx, dy) }
             grid.addSubview(card)
             return card
         }
+        // Tab goes from the name and the description to the cards in reading order,
+        // then round to the name again.
+        nameField.nextKeyView = aboutField
+        var previous: NSView = aboutField
+        for card in cards {
+            previous.nextKeyView = card
+            previous = card
+        }
+        previous.nextKeyView = nameField
         layoutGrid()
+    }
+
+    /// Arrow keys on a focused card: the card beside it, or the one above or below.
+    private func moveFocus(from i: Int, _ dx: Int, _ dy: Int) {
+        let j = i + dx + dy * columns
+        guard cards.indices.contains(j), dx == 0 || i / columns == j / columns else { NSSound.beep(); return }
+        panel?.makeFirstResponder(cards[j])
     }
 
     private func layoutGrid() {
         let size = CGSize(width: 240, height: 168), gap: CGFloat = 16
         let available = max(size.width, (panel?.frame.width ?? 1200) - 96)
-        let columns = max(1, Int((available + gap) / (size.width + gap)))
+        columns = max(1, Int((available + gap) / (size.width + gap)))
         let used = CGFloat(columns) * size.width + CGFloat(columns - 1) * gap
         let inset = max(0, (available - used) / 2)
         for (i, card) in cards.enumerated() {
@@ -377,8 +398,12 @@ private final class FlippedView: NSView {
 }
 
 /// One window: app icon, app name, window title. Selected cards carry their number.
+/// Cards take keyboard focus: Space toggles, the arrows move to a neighbour, Enter creates.
 private final class PickerCard: NSView {
     var onClick: () -> Void = {}
+    var onCreate: () -> Void = {}
+    /// Focus moves by columns and rows (left, right, up, down).
+    var onMove: (Int, Int) -> Void = { _, _ in }
     var position: Int? { didSet { applyState() } }
     private let noteLabel = NSTextField(labelWithString: "")
     private var baseNote: String?
@@ -390,6 +415,7 @@ private final class PickerCard: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.cornerRadius = 16
+        focusRingType = .exterior
         setAccessibilityRole(.button)
         setAccessibilityLabel("\(app), \(title)")
 
@@ -448,6 +474,27 @@ private final class PickerCard: NSView {
 
     override func mouseUp(with event: NSEvent) { onClick() }
     override func accessibilityPerformPress() -> Bool { onClick(); return true }
+
+    // MARK: Keyboard
+
+    override var acceptsFirstResponder: Bool { true }
+    override func becomeFirstResponder() -> Bool {
+        scrollToVisible(bounds.insetBy(dx: -8, dy: -8))   // the ring too
+        return super.becomeFirstResponder()
+    }
+    override func keyDown(with event: NSEvent) {
+        if event.charactersIgnoringModifiers == " " { onClick(); return }
+        interpretKeyEvents([event])   // Tab, arrows, Enter; Esc reaches the panel
+    }
+    override func insertTab(_ sender: Any?) { window?.selectNextKeyView(self) }
+    override func insertBacktab(_ sender: Any?) { window?.selectPreviousKeyView(self) }
+    override func insertNewline(_ sender: Any?) { onCreate() }
+    override func moveLeft(_ sender: Any?) { onMove(-1, 0) }
+    override func moveRight(_ sender: Any?) { onMove(1, 0) }
+    override func moveUp(_ sender: Any?) { onMove(0, -1) }
+    override func moveDown(_ sender: Any?) { onMove(0, 1) }
+    override func drawFocusRingMask() { NSBezierPath(roundedRect: bounds, xRadius: 16, yRadius: 16).fill() }
+    override var focusRingMaskBounds: NSRect { bounds }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); applyState() }
 
     private func applyState() {
