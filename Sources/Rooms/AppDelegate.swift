@@ -16,6 +16,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// The last deleted room and where it was in the list, for Undo.
     private var lastDeleted: (room: Room, index: Int)?
     private var paletteSnapshot: WindowEngine.Snapshot?
+    /// The picker was opened from the palette (⌘E, Enter on a new name, Edit Windows…):
+    /// when it closes, the palette comes back on that room (by id, nil for a new one)
+    /// so Tab and ⇧Tab can lay it out with its new windows.
+    private var pickerReturn: (toPalette: Bool, roomID: String?) = (false, nil)
     /// The window work running now. Switching, saving, laying out after a display
     /// change and Show Everything run one at a time, in the order asked: two at once
     /// would interleave their moves, each hiding what the other just showed.
@@ -58,15 +62,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         palette.onChoose = { [unowned self] room in inTurn { await self.walk(into: room) } }
-        palette.onSave = { [unowned self] name in openPicker(name: name) }
+        palette.onSave = { [unowned self] name in openPicker(name: name, fromPalette: true) }
         picker.onDone = { [unowned self] choice in
             inTurn {
                 // Behind the picker, find how small each app lets its window get, so the
                 // room fits this screen on the first try.
                 await self.engine.measureMinimums(of: choice.windows)
                 self.picker.finishSaving(choice.session)
-                await self.saveRoom(named: choice.name, renaming: choice.originalName, about: choice.about, windows: choice.windows)
+                let saved = await self.saveRoom(named: choice.name, renaming: choice.originalName, about: choice.about, windows: choice.windows)
+                if self.pickerReturn.toPalette { self.palette.show(selecting: saved?.id ?? self.pickerReturn.roomID) }
             }
+        }
+        picker.onCancelled = { [unowned self] in
+            if pickerReturn.toPalette { palette.show(selecting: pickerReturn.roomID) }
         }
         engine.claimedWindows = { [unowned self] room in
             Set(rooms.filter { $0.id != room.id }.flatMap { $0.windows.compactMap(\.windowID) })
@@ -103,6 +111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         picker.onDelete = { [unowned self] name in
             if let room = rooms.first(where: { Matcher.fold($0.name) == Matcher.fold(name) }) { deleteRoom(room) }
+            if pickerReturn.toPalette { palette.show() }
         }
         palette.onRemember = { [unowned self] room in
             palette.hide()
@@ -369,8 +378,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Opens the window picker. An existing room's windows start selected (in its
-    /// order); for a new room, the windows you can see start selected.
-    private func openPicker(name: String = "") {
+    /// order); for a new room, the windows you can see start selected. `fromPalette`:
+    /// the palette comes back on the room afterwards.
+    private func openPicker(name: String = "", fromPalette: Bool = false) {
         guard AX.isTrusted else {
             askForAccessibility(reason: "to see which windows are open and where they are.")
             return
@@ -379,6 +389,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         preview.hide()
         let windows = engine.windowsForPicking()
         let existing = rooms.first { Matcher.fold($0.name) == Matcher.fold(name) && !name.isEmpty }
+        pickerReturn = (fromPalette, existing?.id)
         var preselected: [Int] = []
         if let existing, !existing.windows.isEmpty {
             let assignment = SlotMatcher.assign(slots: existing.windows, windows: windows.map(\.info), claimed: engine.claimedWindows(existing))
@@ -398,15 +409,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Saves chosen windows as a room, new or existing (matched by name). `renaming` is
     /// the room's previous name when you edited it; the room keeps its id, so its
-    /// shortcut and layouts come along.
-    private func saveRoom(named name: String, renaming original: String = "", about: String = "", windows chosen: [LiveWindow]) async {
+    /// shortcut and layouts come along. Returns the room as saved, or nil if it wasn't.
+    @discardableResult
+    private func saveRoom(named name: String, renaming original: String = "", about: String = "", windows chosen: [LiveWindow]) async -> Room? {
         var all = rooms
         // Only an edit (the picker opened on a room) changes an existing room; a new
         // room with a taken name is refused rather than overwriting it.
         let existing = original.isEmpty ? nil : all.firstIndex { Matcher.fold($0.name) == Matcher.fold(original) }
         if let clash = all.firstIndex(where: { Matcher.fold($0.name) == Matcher.fold(name) }), clash != existing {
             alert("There's already a room called “\(all[clash].name)”", "Choose another name, or edit that room instead.")
-            return
+            return nil
         }
         var base: Room
         if let i = existing {
@@ -445,10 +457,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             markCurrent(room)
             _ = await Switcher.walk(into: room, engine: engine)
             toast.show("Saved \(room.name) · \(count)",
-                       detail: layoutPhrase(reading) + " · To change the layout: \(key), then Tab")
+                       detail: layoutPhrase(reading) + (pickerReturn.toPalette ? " · Tab changes the layout, ⇧Tab adjusts it" : " · To change the layout: \(key), then Tab"))
             await engine.settle()
+            return room
         } catch {
             alert("Couldn't save the room", error.localizedDescription)
+            return nil
         }
     }
 

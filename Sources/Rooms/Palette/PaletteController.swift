@@ -60,10 +60,13 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
 
     func toggle() { isVisible ? hide() : show() }
 
-    func show() {
+    /// `selecting`: a room to start on (after its windows were chosen, so Tab and
+    /// ⇧Tab can lay it out straight away); otherwise the most recent room.
+    func show(selecting roomID: String? = nil) {
         willShow()
         field.stringValue = ""
         update()
+        if let roomID, let i = items.firstIndex(where: { if case .room(let r) = $0 { r.id == roomID } else { false } }) { select(i) }
         position()
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         panel.alphaValue = reduceMotion ? 1 : 0
@@ -111,6 +114,11 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         panel.onCommandS = { [weak self] in
             guard let self, selected < items.count, case .room(let room) = items[selected], !room.windows.isEmpty else { return }
             onRemember(room)
+        }
+        panel.onCommandE = { [weak self] in
+            guard let self, selected < items.count, case .room(let room) = items[selected] else { return }
+            hide()
+            onSave(room.name)
         }
         panel.onCommandDigit = { [weak self] n in
             guard let self, selected < items.count, case .room(let room) = items[selected] else { return }
@@ -287,7 +295,7 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
 
         // The footer names the layout of the selected room; Tab changes it.
         if let room, !room.windows.isEmpty {
-            footerLeft.stringValue = "Here: \(layoutFor(room).title)    ⇥ Layout    ⌘S Remember mine    ⌘1–9 Key"
+            footerLeft.stringValue = "Here: \(layoutFor(room).title)    ⇥ Layout    ⌘E Windows    ⌘S Remember    ⌘1–9 Key"
         } else if let id = currentRoomID(), let current = rooms().first(where: { $0.id == id }) {
             footerLeft.stringValue = "In \(current.name)"
         } else {
