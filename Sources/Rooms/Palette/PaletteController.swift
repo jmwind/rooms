@@ -61,6 +61,9 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     private var items: [Item] = []
     private var selected = 0
     private var isAdjusting = false
+    /// Where the mouse was when the panel opened: a row that happens to be under a
+    /// resting pointer mustn't take the selection from the room you're in.
+    private var mouseAtShow: NSPoint?
     private var topEdge: CGFloat = 0
     private var iconCache: [String: NSImage] = [:]
 
@@ -76,6 +79,7 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     func show(selecting roomID: String? = nil) {
         willShow()
         field.stringValue = ""
+        mouseAtShow = NSEvent.mouseLocation
         update()
         if let roomID, let i = items.firstIndex(where: { if case .room(let r) = $0 { r.id == roomID } else { false } }) { select(i) }
         position()
@@ -279,7 +283,11 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         }
 
         for (i, row) in rows.enumerated() {
-            row.onHover = { [weak self] in self?.select(i) }
+            row.onHover = { [weak self] in
+                guard let self else { return }
+                if let at = mouseAtShow { guard NSEvent.mouseLocation != at else { return }; mouseAtShow = nil }
+                select(i)
+            }
             row.onClick = { [weak self] in
                 self?.finishAdjusting(keep: true)
                 self?.select(i)

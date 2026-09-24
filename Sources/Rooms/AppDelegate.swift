@@ -251,6 +251,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !room.windows.isEmpty, !AX.isTrusted {
             askForAccessibility(reason: "to put \(room.name)'s windows back in place. Until then, Rooms switches whole apps.")
         }
+        // Current from the moment you choose it, so ⌥Space opened during the switch
+        // already starts on this room.
+        markCurrent(room)
         let report = await Switcher.walk(into: room, engine: engine)
         if let arranged = report.arranged, !room.windows.isEmpty {
             let placed = arranged.placed == 1 ? "1 window" : "\(arranged.placed) windows"
@@ -261,7 +264,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         paletteSnapshot = nil
         // The windows have moved under the preview; let it fade away.
         preview.hide(animated: true, delay: 0.05)
-        markCurrent(room)
         // Now that the room is shown, check that every window really took its place,
         // then take its picture for the preview.
         await engine.settle()
