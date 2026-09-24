@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let preview = LayoutPreview()
     private let adjuster = LayoutAdjuster()
     private let toast = Toast()
+    private let thumbnails = Thumbnails()
     private let picker = RoomPicker()
     private let welcome = Welcome()
     private var lastScreens: [CGRect] = []
@@ -62,8 +63,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 guard AX.isTrusted, palette.isVisible else { return }
                 paletteSnapshot = engine.snapshot()
                 palette.refreshPreview()
+                // Pictures of the windows on screen now (the room you may be leaving) that
+                // have none yet or haven't been taken for a while, for the cards.
+                if let snap = paletteSnapshot {
+                    let onScreen = snap.windows.filter { !$0.app.isHidden && !$0.isMinimized && $0.windowID.map { engine.ledger.entries[$0] == nil } ?? false }
+                    Task { [unowned self] in
+                        await thumbnails.capture(onScreen.compactMap { w in w.windowID.map { ($0, w.bundleID) } }, olderThan: Thumbnails.refreshAfter)
+                        if palette.isVisible { palette.refreshPreview() }
+                    }
+                }
             }
         }
+        thumbnails.enabled = { [unowned self] in previewsOn }
         palette.onChoose = { [unowned self] room in inTurn { await self.walk(into: room) } }
         palette.onSave = { [unowned self] name in openPicker(name: name, fromPalette: true) }
         picker.onDone = { [unowned self] choice in
@@ -251,8 +262,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // The windows have moved under the preview; let it fade away.
         preview.hide(animated: true, delay: 0.05)
         markCurrent(room)
-        // Now that the room is shown, check that every window really took its place.
+        // Now that the room is shown, check that every window really took its place,
+        // then take its picture for the preview.
         await engine.settle()
+        await thumbnails.capture(engine.placedWindows)
+    }
+
+    /// Window Previews in the menu: pictures of windows on the preview's cards.
+    private var previewsOn: Bool {
+        get { defaults.object(forKey: "windowPreviews") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "windowPreviews") }
+    }
+
+    @objc private func togglePreviews() {
+        previewsOn.toggle()
+        if !previewsOn { thumbnails.forgetAll() }
+        toast.show(previewsOn ? "Window previews on" : "Window previews off",
+                   detail: previewsOn ? "Cards in \(HotkeyCenter.shared.current?.label ?? "⌥ Space") show the windows themselves" : "Cards show the app's icon; the pictures are deleted")
     }
 
     // MARK: Snapping
@@ -387,7 +413,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 rect: p.rect,
                 icon: icon(for: p.window.bundleID),
                 title: p.window.app.localizedName ?? p.slot.app ?? "",
-                subtitle: p.window.title
+                subtitle: p.window.title,
+                thumbnail: thumbnails.image(for: p.window.windowID, of: p.window.bundleID)
             )
         }, avoiding: palette.frame)
         preview.highlight(adjusted == nil ? nil : adjuster.highlight)
@@ -640,6 +667,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !AX.isTrusted {
             menu.addItem(item("Allow Rooms to Arrange Windows…", #selector(allowAccessibility)))
         }
+        if previewsOn, !thumbnails.isAllowed {
+            menu.addItem(item("Allow Window Previews…", #selector(allowPreviews)))
+        }
         if UserDefaults(suiteName: "com.apple.WindowManager")?.bool(forKey: "GloballyEnabled") == true {
             let warning = NSMenuItem(title: "Stage Manager is on. Rooms works best with it off.", action: nil, keyEquivalent: "")
             warning.isEnabled = false
@@ -683,6 +713,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
         menu.addItem(item("Show Everything", #selector(showAll)))
+        let previews = item("Window Previews", #selector(togglePreviews))
+        previews.state = previewsOn ? .on : .off
+        menu.addItem(previews)
 
         let snapMenu = NSMenu()
         for (i, b) in SnapBinding.all.enumerated() {
@@ -758,6 +791,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let current = rooms.first(where: { $0.id == currentRoomID }) else { return }
         openPicker(name: current.name)
     }
+
+    @objc private func allowPreviews() { thumbnails.askAgain() }
 
     @objc private func allowAccessibility() {
         AX.requestTrust()

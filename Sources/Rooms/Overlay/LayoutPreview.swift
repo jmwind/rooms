@@ -14,6 +14,8 @@ final class LayoutPreview {
         let icon: NSImage?
         let title: String
         let subtitle: String
+        /// A picture of the window, when Rooms has one; the icon stands in otherwise.
+        var thumbnail: NSImage? = nil
     }
 
     private var windows: [NSWindow] = []
@@ -45,6 +47,7 @@ final class LayoutPreview {
                 if let view = existing[card.id], !firstShow {
                     // Same window, new place: glide there.
                     container.addSubview(view, positioned: .above, relativeTo: nil) // keep front-to-back order
+                    view.thumbnail = card.thumbnail
                     if reduceMotion {
                         view.frame = local
                         view.fit(avoiding: clear)
@@ -243,10 +246,22 @@ private final class HighlightView: NSView {
 /// One window-to-be, drawn as a simplified window.
 private final class CardView: NSView {
     private let icon: NSImageView
+    private let picture = NSImageView()
     private var iconCenterY: NSLayoutConstraint!
     private var iconWidth: NSLayoutConstraint!
     private var iconHeight: NSLayoutConstraint!
     private let hasIcon: Bool
+
+    /// The window's picture fills the body under the title bar; without one, the icon shows.
+    var thumbnail: NSImage? {
+        didSet { if thumbnail !== oldValue { showThumbnail() } }
+    }
+
+    private func showThumbnail() {
+        picture.image = thumbnail
+        picture.isHidden = thumbnail == nil
+        icon.isHidden = !hasIcon || thumbnail != nil || frame.height < 160
+    }
 
     init(card: LayoutPreview.Card, frame: CGRect) {
         icon = NSImageView(image: card.icon ?? NSImage())
@@ -299,6 +314,15 @@ private final class CardView: NSView {
         addSubview(titleBar)
         addSubview(rule)
 
+        // The picture sits under the title bar, clipped to the card's bottom corners.
+        picture.imageScaling = .scaleProportionallyUpOrDown
+        picture.imageAlignment = .alignTop
+        picture.wantsLayer = true
+        picture.layer?.cornerRadius = 16
+        picture.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        picture.layer?.masksToBounds = true
+        picture.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(picture)
         icon.imageScaling = .scaleProportionallyUpOrDown
         icon.translatesAutoresizingMaskIntoConstraints = false
         addSubview(icon)
@@ -314,10 +338,17 @@ private final class CardView: NSView {
             rule.topAnchor.constraint(equalTo: titleBar.bottomAnchor),
             rule.leadingAnchor.constraint(equalTo: leadingAnchor),
             rule.trailingAnchor.constraint(equalTo: trailingAnchor),
+            picture.topAnchor.constraint(equalTo: rule.bottomAnchor),
+            picture.leadingAnchor.constraint(equalTo: leadingAnchor),
+            picture.trailingAnchor.constraint(equalTo: trailingAnchor),
+            picture.bottomAnchor.constraint(equalTo: bottomAnchor),
             iconWidth, iconHeight,
             icon.centerXAnchor.constraint(equalTo: centerXAnchor),
             iconCenterY,
         ])
+        // Set in the initializer, so the observer doesn't run: show it by hand.
+        thumbnail = card.thumbnail
+        showThumbnail()
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -329,7 +360,7 @@ private final class CardView: NSView {
         let side: CGFloat = f.height > 320 && f.width > 320 ? 96 : 64
         iconWidth.constant = side
         iconHeight.constant = side
-        icon.isHidden = !hasIcon || f.height < 160
+        icon.isHidden = !hasIcon || thumbnail != nil || f.height < 160
         iconCenterY.constant = -centerFromBottom(size: f.size, avoiding: avoiding, side: side)
     }
 
