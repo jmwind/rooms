@@ -31,6 +31,22 @@ final class PalettePanel: NSPanel {
     var onCommandDelete: (() -> Void)?
     /// ⌘Z: bring back the room just deleted.
     var onCommandZ: (() -> Void)?
+    /// A two-finger swipe or the wheel over the panel: one room on (+1) or back (-1).
+    var onScroll: ((Int) -> Void)?
+
+    /// Enough travel that you meant it, so a resting finger doesn't change rooms.
+    private var travel: CGFloat = 0
+
+    override func scrollWheel(with event: NSEvent) {
+        guard let onScroll else { return }
+        travel += abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) ? event.scrollingDeltaX : -event.scrollingDeltaY
+        let threshold: CGFloat = event.hasPreciseScrollingDeltas ? 28 : 8
+        while abs(travel) >= threshold {
+            onScroll(travel > 0 ? -1 : 1)
+            travel -= travel > 0 ? threshold : -threshold
+        }
+        if event.phase == .ended || event.momentumPhase == .ended { travel = 0 }
+    }
 
     override var canBecomeKey: Bool { true }
 

@@ -39,6 +39,14 @@ The windows come to the screen you're on and lay themselves out. From then on, �
 ## Around the rooms
 
 - **Previews show the windows.** The cards in ⌥Space show a picture of each window once Rooms has seen it on screen, so you can tell three browser windows apart at a glance. This needs **Screen Recording** access (System Settings → Privacy & Security → Screen & System Audio Recording; Rooms asks once, and macOS applies it on the next launch). A window's picture is taken when it's first seen and again when you open ⌥Space over it after a few minutes, so cards show windows roughly as you last left them without Rooms reading the screen all the time. **Window Previews** in the menu turns them off and deletes the pictures.
+- **Your rooms, zoomed out.** ⌥Space blurs the desk and turns your rooms into
+  miniatures of themselves, on a ring around you: the room you're on is square in
+  front of you, big, with each of its windows where it will be (and a picture of the
+  window when Rooms has one). The next room and the last one are turned away on the
+  surface of a large sphere, so you can see what's coming. **← →** (or a two-finger
+  swipe, or ↑ ↓) turns the ring, which has no end: keep going one way and you come
+  back round to where you started. Press **Enter** and the room you're looking at
+  opens out to the size of the screen, where its real windows land underneath it.
 - **Layouts.** In ⌥Space, press **Tab** to try the layouts that fit this screen: Focus (one big window beside the rest), Columns, Grid, **My Layout** (your own arrangement, snapped to a grid with even gaps), or Stack (cards with their title bars peeking out, only when nothing tidier fits). The preview glides as you go.
 - **Adjust a layout by hand.** In ⌥Space, select the room and press **⇧Tab**: the separator between two windows lights up in the preview. **← → ↑ ↓** move it, and the windows on both sides resize together (hold **⇧** to move a twelfth of the screen at a time). **Tab** lights the next separator. **⇧Tab** (or Enter) keeps the result as **My Layout** for this display; Esc leaves the layout as it was. Every window of the room needs to be open for this, and Stack can't be adjusted, since it overlaps on purpose.
 - **Windows come to visit.** When a link opens in a browser window that isn't in the room, or you ⌘Tab to a window that was parked, it comes to the middle of your screen to visit. **⌘E** keeps it in the room; switching rooms puts it back where it was.

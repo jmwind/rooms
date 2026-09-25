@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let palette = PaletteController()
     private let engine = WindowEngine()
     private let preview = LayoutPreview()
+    private let carousel = RoomCarousel()
     private let adjuster = LayoutAdjuster()
     private let toast = Toast()
     private let thumbnails = Thumbnails()
@@ -99,6 +100,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             picker.suggestAbout(template.about)
         }
         palette.onPreview = { [unowned self] room in showPreview(for: room) }
+        palette.onRooms = { [unowned self] list, middle in showCarousel(list, middle: middle) }
+        carousel.onTurn = { [unowned self] i in palette.turn(toRoom: i) }
+        carousel.onTurnBy = { [unowned self] n in palette.turn(by: n) }
+        carousel.onChoose = { [unowned self] in palette.chooseSelected() }
+        carousel.menuForCard = { [unowned self] in cardMenu() }
         palette.onLayoutChange = { [unowned self] room, kind in setLayout(kind, for: room) }
         palette.layoutFor = { [unowned self] room in room.layout(on: engine.activeScreenUUID()) }
         palette.nextLayout = { [unowned self] room, forward in
@@ -112,6 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         palette.onCancel = { [unowned self] in
             preview.hide()
+            carousel.hide(animated: true)
             paletteSnapshot = nil
         }
         // ⇧Tab: adjust the layout by hand, on the preview; kept as My Layout.
@@ -119,7 +126,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard AX.isTrusted else { return "Allow Rooms to arrange windows first (in the menu bar menu)." }
             let snap = paletteSnapshot ?? engine.snapshot()
             paletteSnapshot = snap
-            return adjuster.begin(room, snapshot: snap, engine: engine)
+            let why = adjuster.begin(room, snapshot: snap, engine: engine)
+            // Adjusting works on the full-size preview: the separator you're moving is
+            // what you're aiming at, so the ring steps aside until you're done.
+            if why == nil { carousel.hide(animated: true) }
+            return why
         }
         palette.adjustNext = { [unowned self] in adjuster.next() }
         palette.adjustMove = { [unowned self] dx, dy in adjuster.move(dx: dx, dy: dy) }
@@ -245,6 +256,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // show nothing: choose its windows instead.
         if room.windows.isEmpty, room.apps.isEmpty {
             preview.hide()
+            carousel.hide()
             openPicker(name: room.name)
             return
         }
@@ -254,6 +266,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Current from the moment you choose it, so ⌥Space opened during the switch
         // already starts on this room.
         markCurrent(room)
+        // The card you chose opens out to the size of the screen, where its windows
+        // are about to land, and stays as a veil over the desk until they have.
+        carousel.zoomIn()
         let report = await Switcher.walk(into: room, engine: engine)
         if let arranged = report.arranged, !room.windows.isEmpty {
             let placed = arranged.placed == 1 ? "1 window" : "\(arranged.placed) windows"
@@ -262,8 +277,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                        detail: missing.isEmpty ? nil : "\(missing.joined(separator: ", "))\(missing.count == 1 ? "'s window isn't" : " windows aren't") open. Open \(missing.count == 1 ? "it" : "them") and save the room again.")
         }
         paletteSnapshot = nil
-        // The windows have moved under the preview; let it fade away.
+        // The windows have moved underneath; let the veil fade away.
         preview.hide(animated: true, delay: 0.05)
+        carousel.hide(animated: true)
         // Now that the room is shown, check that every window really took its place,
         // then take its picture for the preview.
         await engine.settle()
@@ -396,15 +412,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: Layout preview
 
+    /// The full-size preview, which is now what ⇧Tab adjusts against: the room's
+    /// windows where they will really be, with the separator you're moving lit.
+    /// Choosing a room is the ring's job (`showCarousel`), so nothing comes up here
+    /// until you're adjusting by hand.
     private func showPreview(for room: Room?) {
-        guard let room, !room.windows.isEmpty, let snap = paletteSnapshot else {
-            preview.hide()
-            return
-        }
-        // While adjusting by hand, the preview follows the separators, not the room's layout.
-        let adjusted = adjuster.placements(for: room)
-        let placements = adjusted ?? engine.plan(room, in: snap).placements
-        guard !placements.isEmpty else {
+        guard let room, !room.windows.isEmpty, let placements = adjuster.placements(for: room), !placements.isEmpty else {
             preview.hide()
             return
         }
@@ -419,8 +432,76 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 thumbnail: thumbnails.image(for: p.window.windowID, of: p.window.bundleID)
             )
         }, avoiding: palette.frame)
-        preview.highlight(adjusted == nil ? nil : adjuster.highlight)
+        preview.highlight(adjuster.highlight)
     }
+
+    /// The rooms on the ring in ⌥Space, each one a miniature of itself: its windows
+    /// where they'd be on this display, with a picture of each window when Rooms has
+    /// one. Laid out from the room alone, so the cards are up before the desk has
+    /// been read (the pictures arrive with `refreshPreview`).
+    private func showCarousel(_ list: [Room], middle: Int?) {
+        guard !list.isEmpty, let screen = engine.activeScreen() else {
+            carousel.hide()
+            return
+        }
+        let visible = screen.visible
+        let current = currentRoomID
+        let shortcuts = Room.withShortcuts(rooms)
+        let unit = { (rect: CGRect) in
+            CGRect(x: (rect.minX - visible.minX) / visible.width,
+                   y: (rect.minY - visible.minY) / visible.height,
+                   width: rect.width / visible.width,
+                   height: rect.height / visible.height)
+        }
+        let cards = list.map { room -> RoomCarousel.Card in
+            // Once the desk has been read, the card shows what walking in would really
+            // do: the room's windows that are open, where they'll go. Until then it's
+            // laid out from the room alone, so there's a card the moment ⌥Space opens.
+            let planned = paletteSnapshot.map { engine.plan(room, in: $0).placements } ?? []
+            let panes = planned.isEmpty
+                ? zip(room.windows, engine.miniature(room, on: screen)).map { slot, rect in
+                    RoomCarousel.Pane(unit: unit(rect), icon: icon(for: slot.bundleID),
+                                      picture: thumbnails.image(for: slot.windowID, of: slot.bundleID))
+                  }
+                : planned.map { p in
+                    RoomCarousel.Pane(unit: unit(p.rect), icon: icon(for: p.window.bundleID),
+                                      picture: thumbnails.image(for: p.window.windowID, of: p.window.bundleID))
+                  }
+            let count = room.windows.isEmpty
+                ? (room.apps.isEmpty ? "No apps yet" : (room.apps.count == 1 ? "1 app" : "\(room.apps.count) apps"))
+                : (room.windows.count == 1 ? "1 window" : "\(room.windows.count) windows")
+            var bundles: [String] = []
+            for id in room.windows.map(\.bundleID) + room.apps.map(\.bundleID) where !bundles.contains(id) { bundles.append(id) }
+            let badge = [room.id == current ? "Current" : nil, shortcuts.first { $0.value.id == room.id }.map { "⌃⌥\($0.key)" }]
+                .compactMap { $0 }.joined(separator: "    ")
+            return RoomCarousel.Card(
+                id: room.id,
+                name: room.name,
+                detail: [room.kind, count].compactMap { $0 }.joined(separator: " · "),
+                badge: badge.isEmpty ? nil : badge,
+                icons: bundles.compactMap(icon),
+                panes: panes)
+        }
+        carousel.show(cards, selected: middle ?? lastOnRing)
+        if let middle { lastOnRing = middle }
+    }
+
+    /// Which card the ring is resting on, for when the selection moves to something
+    /// that isn't a room ("New room …") and the ring should stay where it is.
+    private var lastOnRing = 0
+
+    /// Right-click on the middle card: the same two things the room's row used to offer.
+    private func cardMenu() -> NSMenu? {
+        guard palette.selectedRoom != nil else { return nil }
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Edit Windows…", action: #selector(editFromCard), keyEquivalent: "").target = self
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Delete Room", action: #selector(deleteFromCard), keyEquivalent: "").target = self
+        return menu
+    }
+
+    @objc private func editFromCard() { palette.editSelected() }
+    @objc private func deleteFromCard() { palette.deleteSelected() }
 
     /// Keeps a layout adjusted by hand (⇧Tab in the palette): the room's My Layout, and
     /// its layout on this display. Only the cells and the layout change, so a shortcut
@@ -480,6 +561,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         palette.hide()
         preview.hide()
+        carousel.hide()
         let windows = engine.windowsForPicking()
         let existing = rooms.first { Matcher.fold($0.name) == Matcher.fold(name) && !name.isEmpty }
         pickerReturn = (fromPalette, existing?.id)
