@@ -263,15 +263,15 @@ private final class CarouselView: NSView {
         instances = []
         guard let layer, !cards.isEmpty, bounds.width > 200 else { return }
 
-        // The room you're on is the point of the ring, so it's big: half the screen
-        // across, in the shape of the screen, with the next and previous rooms
-        // coming round the sphere behind it.
-        let width = (bounds.width * 0.5).rounded()
+        // The room you're on is the point of the ring, so it's nearly the whole
+        // screen, in the shape of the screen: just enough room at the sides for the
+        // next and previous rooms to show, coming round the sphere behind it.
         let shape = stage.width > 0 ? stage.height / stage.width : 0.62
+        let width = min(bounds.width * 0.86, bounds.height * 0.86 / shape).rounded()
         card = CGSize(width: width, height: (width * shape).rounded())
         // In the middle of the screen, a touch low: the palette floats over the top
         // of the ring, which is where the rooms' names are.
-        centre = CGPoint(x: bounds.midX, y: bounds.midY - bounds.height * 0.04)
+        centre = CGPoint(x: bounds.midX, y: bounds.midY - bounds.height * 0.02)
 
         var perspective = CATransform3DIdentity
         perspective.m34 = -1 / (ring.eye * card.width)

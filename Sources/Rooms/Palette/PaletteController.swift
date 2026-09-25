@@ -22,6 +22,9 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     /// The next layout worth trying for a room (forward or back), skipping ones that
     /// don't fit; nil when only one layout fits on this screen.
     var nextLayout: (Room, Bool) -> LayoutKind? = { room, forward in forward ? room.layout.next : room.layout.previous }
+    /// Why Tab can't try layouts at all (no Accessibility, so no open windows to lay
+    /// out), or nil when it can.
+    var cantTryLayouts: () -> String? = { nil }
     /// The room's layout on the display you're working on.
     var layoutFor: (Room) -> LayoutKind = { $0.layout }
     /// The room's direct key (1 means ⌃⌥1), and assigning one with ⌘1…9.
@@ -409,6 +412,12 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     /// Tab: try the next layout on the selected room, live.
     private func cycleLayout() {
         guard selected < items.count, case .room(let room) = items[selected], !room.windows.isEmpty else { return }
+        if let why = cantTryLayouts() {
+            // The ring draws rooms without Accessibility, so say why Tab can't.
+            footerLeft.stringValue = why
+            NSSound.beep()
+            return
+        }
         guard let kind = nextLayout(room, true) else {
             // Say so, rather than Tab seeming to do nothing.
             footerLeft.stringValue = "Only one layout fits these windows on this screen."

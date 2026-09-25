@@ -29,7 +29,7 @@ public struct Ring: Sendable {
     /// The defaults are the shape Rooms draws: the room you're on square in front of
     /// you, the next and the previous turned away far enough to read as a sphere and
     /// to run off the sides of the screen, and nothing else in the way.
-    public init(count: Int, step: CGFloat = 0.46, span: CGFloat = 1.6, radius: CGFloat = 1.7,
+    public init(count: Int, step: CGFloat = 0.46, span: CGFloat = 1.6, radius: CGFloat = 2.0,
                 eye: CGFloat = 1.8, bulge: CGFloat = 0.45, tilt: CGFloat = 0.34) {
         self.count = count
         self.step = step

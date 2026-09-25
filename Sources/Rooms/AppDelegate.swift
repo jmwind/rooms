@@ -116,6 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let i = choices.firstIndex(of: current) ?? 0
             return choices[(i + (forward ? 1 : choices.count - 1)) % choices.count]
         }
+        palette.cantTryLayouts = { AX.isTrusted ? nil : "Allow Rooms to arrange windows first (in the menu bar menu)." }
         palette.onCancel = { [unowned self] in
             preview.hide()
             carousel.hide(animated: true)
