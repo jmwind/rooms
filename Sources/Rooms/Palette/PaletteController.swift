@@ -14,6 +14,10 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     var onSave: (String) -> Void = { _ in }
     /// The selected room changed (nil: nothing to preview).
     var onPreview: (Room?) -> Void = { _ in }
+    /// The rooms to show on the ring, and which of them is in the middle. Nil when
+    /// the selection is on something that isn't a room ("New room …"), which leaves
+    /// the ring where it was.
+    var onRooms: ([Room], Int?) -> Void = { _, _ in }
     var onLayoutChange: (Room, LayoutKind) -> Void = { _, _ in }
     /// The next layout worth trying for a room (forward or back), skipping ones that
     /// don't fit; nil when only one layout fits on this screen.
@@ -78,6 +82,8 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     /// ⇧Tab can lay it out straight away); otherwise the most recent room.
     func show(selecting roomID: String? = nil) {
         willShow()
+        isShowing = true
+        defer { isShowing = false }
         field.stringValue = ""
         mouseAtShow = NSEvent.mouseLocation
         update()
@@ -87,6 +93,7 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         panel.alphaValue = reduceMotion ? 1 : 0
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(field)
+        emitRooms()   // now that the panel is placed, the ring can keep clear of it
         if !reduceMotion {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.15
@@ -112,11 +119,70 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     }
 
     private var isClosing = false
+    /// True through `show`, before the panel is on screen: the ring is built then, so
+    /// it is never empty for a frame.
+    private var isShowing = false
 
-    /// Asks for the selected room's preview again (e.g. once the desk has been read).
+    /// Asks for the selected room's preview and the ring's cards again (e.g. once the
+    /// desk has been read, or pictures of the windows have been taken).
     func refreshPreview() {
-        guard panel.isVisible, selected < items.count, case .room(let room) = items[selected] else { return }
+        guard panel.isVisible else { return }
+        emitRooms()
+        guard selected < items.count, case .room(let room) = items[selected] else { return }
         onPreview(room)
+    }
+
+    /// The rooms on the ring and which one is in the middle.
+    private func emitRooms() {
+        guard panel.isVisible || isShowing else { return }
+        var list: [Room] = []
+        var middle: Int?
+        for (i, item) in items.enumerated() {
+            guard case .room(let room) = item else { continue }
+            if i == selected { middle = list.count }
+            list.append(room)
+        }
+        onRooms(list, middle)
+    }
+
+    // MARK: What the ring asks for
+
+    /// A card beside the middle one was clicked: turn to that room.
+    func turn(toRoom index: Int) {
+        var seen = 0
+        for (i, item) in items.enumerated() {
+            guard case .room = item else { continue }
+            if seen == index { select(i); return }
+            seen += 1
+        }
+    }
+
+    /// A swipe, or the wheel: one room on or back, round and round.
+    func turn(by delta: Int) {
+        guard !isAdjusting else { return }
+        move(delta)
+    }
+
+    /// Enter, or a click on the middle card.
+    func chooseSelected() { choose() }
+
+    /// The room in the middle of the ring, for its right-click menu.
+    var selectedRoom: Room? {
+        guard selected < items.count, case .room(let room) = items[selected] else { return nil }
+        return room
+    }
+
+    /// Edit Windows… and Delete Room, as ⌘E and ⌘⌫ do them.
+    func editSelected() {
+        guard let room = selectedRoom else { return }
+        hide()
+        onSave(room.name)
+    }
+
+    func deleteSelected() {
+        guard let room = selectedRoom else { return }
+        finishAdjusting(keep: true)
+        delete(room)
     }
 
     // MARK: Building
@@ -142,6 +208,7 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             hide()
             onSave(room.name)
         }
+        panel.onScroll = { [weak self] delta in self?.turn(by: delta) }
         panel.onCommandDigit = { [weak self] n in
             guard let self, selected < items.count, case .room(let room) = items[selected] else { return }
             finishAdjusting(keep: true)
@@ -176,7 +243,7 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         // Footer
         footerLeft.font = .systemFont(ofSize: 12)
         footerLeft.textColor = .secondaryLabelColor
-        let hints = NSTextField(labelWithString: "↵ Go    esc Close")
+        let hints = NSTextField(labelWithString: "←→ Rooms    ↵ Go    esc Close")
         hints.font = .systemFont(ofSize: 12)
         hints.textColor = .tertiaryLabelColor
         let footer = NSStackView(views: [footerLeft, NSView(), hints])
@@ -242,6 +309,7 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             let all = rooms()
             let matches = Matcher.rank(query, rooms: all, recency: recency()).prefix(maxRows)
             let current = currentRoomID()
+            // The same rooms, in the same order, as the ring behind the panel.
             for match in matches {
                 let room = match.room
                 let index = rows.count
@@ -323,6 +391,7 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     private func refreshSelection() {
         footerLeft.textColor = .secondaryLabelColor
         for (i, row) in rows.enumerated() { row.isSelected = (i == selected && !items.isEmpty) }
+        emitRooms()
         let room: Room? = if selected < items.count, case .room(let r) = items[selected] { r } else { nil }
 
         // The footer names the layout of the selected room; Tab changes it, ⇧Tab adjusts it.
@@ -449,13 +518,16 @@ final class PaletteController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         case #selector(NSResponder.moveUp(_:)):
             if isAdjusting { nudge(0, -1) } else { move(-1) }
             return true
-        // Left and right move the caret unless a separator is lit.
+        // Left and right turn the ring: they only move the caret once there's
+        // something typed for a caret to move through, and nudge a lit separator.
         case #selector(NSResponder.moveLeft(_:)):
-            guard isAdjusting else { return false }
-            nudge(-1, 0); return true
+            if isAdjusting { nudge(-1, 0); return true }
+            guard field.stringValue.isEmpty else { return false }
+            move(-1); return true
         case #selector(NSResponder.moveRight(_:)):
-            guard isAdjusting else { return false }
-            nudge(1, 0); return true
+            if isAdjusting { nudge(1, 0); return true }
+            guard field.stringValue.isEmpty else { return false }
+            move(1); return true
         // ⇧ + arrow: a twelfth of the screen at a time.
         case #selector(NSResponder.moveLeftAndModifySelection(_:)):
             guard isAdjusting else { return false }

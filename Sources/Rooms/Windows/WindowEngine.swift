@@ -249,6 +249,23 @@ final class WindowEngine {
         }
     }
 
+    /// Where a room's windows sit on one display: every window the room remembers,
+    /// laid out the way the room would be laid out here. For the zoomed-out cards in
+    /// ⌥Space, which is why it needs neither Accessibility nor a read of the desk —
+    /// a card is ready the moment the palette opens. Returned in the room's own order.
+    func miniature(_ room: Room, on screen: ScreenInfo) -> [CGRect] {
+        guard !room.windows.isEmpty else { return [] }
+        return frames(for: room, slots: Array(room.windows.indices),
+                      kind: room.layout(on: screen.uuid), in: screen.visible,
+                      mins: room.windows.map { minimumSize(for: $0.bundleID) })
+    }
+
+    /// The display you're working on, whole: the palette and its cards open here.
+    func activeScreen() -> ScreenInfo? {
+        let screens = ScreenInfo.all()
+        return screens.isEmpty ? nil : screens[activeScreenIndex(in: screens)]
+    }
+
     /// The layouts Tab offers for a room on the display you're on: those that fit its
     /// open windows without overlapping, each looking different from the others.
     func layoutChoices(for room: Room, in snap: Snapshot) -> [LayoutKind] {
